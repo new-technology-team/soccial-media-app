@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native";
 import { ConversationItem } from "../components/chat/ConversationItem";
 import { MessageBubble } from "../components/chat/MessageBubble";
@@ -6,7 +6,7 @@ import { MessageInput } from "../components/chat/MessageInput";
 import { EmptyState } from "../components/common/EmptyState";
 import { TopBar } from "../components/common/TopBar";
 import { SearchBar } from "../components/search/SearchBar";
-import { api } from "../lib/api";
+import { api, authStore, getSocket } from "../lib";
 import type { Conversation, Message } from "../types";
 import { ComposeConversationModal } from "./messages/components";
 import { useConversationCompose } from "./messages/hooks";
@@ -26,6 +26,8 @@ export function MessagesScreen({
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [conversationKeyword, setConversationKeyword] = useState("");
+  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
 
   const filteredConversations = useMemo(() => {
     const q = conversationKeyword.trim().toLowerCase();
@@ -88,10 +90,84 @@ export function MessagesScreen({
   const openConversation = useCallback(
     async (conversation: Conversation) => {
       setSelectedConv(conversation);
+      setConversations((prev) =>
+        prev.map((item) =>
+          item.id === conversation.id ? { ...item, unreadCount: 0 } : item,
+        ),
+      );
       await loadMessages(conversation.id);
     },
     [loadMessages],
   );
+
+  useEffect(() => {
+    const token = authStore.getTokens()?.accessToken;
+    if (!token) return;
+
+    const socket = getSocket(token);
+    socketRef.current = socket;
+
+    const onMessageNew = (payload: any) => {
+      const normalized: Message = {
+        id: String(payload?.id || ""),
+        conversationId: String(payload?.conversationId || ""),
+        senderId: Number(payload?.senderId || 0),
+        senderName: String(payload?.senderName || "Nguoi dung"),
+        content: String(payload?.content ?? payload?.text ?? ""),
+        createdAt: String(payload?.createdAt || new Date().toISOString()),
+      };
+
+      if (!normalized.id || !normalized.conversationId) return;
+
+      if (activeConversationIdRef.current === normalized.conversationId) {
+        setMessages((prev) => {
+          if (prev.some((item) => item.id === normalized.id)) return prev;
+          return [...prev, normalized];
+        });
+      }
+
+      setConversations((prev) => {
+        const target = prev.find((item) => item.id === normalized.conversationId);
+        if (!target) return prev;
+
+        const nextUnread =
+          activeConversationIdRef.current === normalized.conversationId
+            ? 0
+            : (target.unreadCount || 0) + 1;
+
+        const updated: Conversation = {
+          ...target,
+          lastMessage: normalized.content,
+          lastMessageAt: normalized.createdAt,
+          unreadCount: nextUnread,
+        };
+
+        return [updated, ...prev.filter((item) => item.id !== updated.id)];
+      });
+    };
+
+    socket.on("message:new", onMessageNew);
+    return () => {
+      socket.off("message:new", onMessageNew);
+    };
+  }, []);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const previousId = activeConversationIdRef.current;
+    const nextId = selectedConv?.id || null;
+
+    if (previousId && previousId !== nextId) {
+      socket.emit("leave-conversation", previousId);
+    }
+    if (nextId && previousId !== nextId) {
+      socket.emit("join-conversation", nextId);
+    }
+
+    activeConversationIdRef.current = nextId;
+  }, [selectedConv?.id]);
 
   const {
     showComposeModal,

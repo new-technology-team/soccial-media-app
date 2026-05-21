@@ -174,7 +174,7 @@ export function ComposeConversationModal({
                     <EmptyState
                       icon="👥"
                       title="Khong co ban be phu hop"
-                      subtitle="Chi ban be da chap nhan moi them duoc vao nhom"
+                      subtitle="Can it nhat 2 ban be de tao nhom 3 nguoi"
                     />
                   </View>
                 }

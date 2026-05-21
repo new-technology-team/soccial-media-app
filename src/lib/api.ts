@@ -44,15 +44,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("Authorization", `Bearer ${tokens.accessToken}`);
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => undefined, REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...options,
       headers,
-      signal: controller.signal,
     });
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -111,6 +109,11 @@ function resolveAssetUrl(value: unknown): string | undefined {
 }
 
 function mapAuthUser(raw: any): AuthUser {
+  const rawSex = Number(raw?.sex);
+  const normalizedGender =
+    raw?.gender ||
+    (rawSex === 1 ? "male" : rawSex === 2 ? "female" : rawSex === 0 ? "other" : null);
+
   return {
     id: Number(raw?.id ?? raw?.userId ?? raw?.user_id ?? 0),
     email: raw?.email || null,
@@ -118,7 +121,7 @@ function mapAuthUser(raw: any): AuthUser {
     fullName: String(raw?.fullName || raw?.full_name || raw?.displayName || "Người dùng"),
     avatarUrl: resolveAssetUrl(raw?.avatarUrl || raw?.avatar_url) || null,
     dateOfBirth: raw?.dateOfBirth ? String(raw.dateOfBirth) : null,
-    gender: raw?.gender || null,
+    gender: normalizedGender || null,
     isVerified: Boolean(raw?.isVerified ?? raw?.is_verified ?? false),
     role: raw?.role,
     accountStatus: raw?.accountStatus || raw?.status,
@@ -172,7 +175,7 @@ function mapConversation(raw: any): Conversation {
     (member: any) => ({
       userId: Number(member?.userId || 0),
       name: String(member?.fullName || member?.name || "Người dùng"),
-      avatarUrl: member?.avatarUrl || undefined,
+      avatarUrl: resolveAssetUrl(member?.avatarUrl) || undefined,
     }),
   );
 
@@ -277,13 +280,19 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  me: () => request<{ user: AuthUser }>("/api/auth/me").then((res) => res.user),
+  me: () =>
+    request<{ user?: any } | any>("/api/auth/me").then((res) =>
+      mapAuthUser((res as any)?.user ?? res),
+    ),
 
   updateProfile: (payload: UpdateProfilePayload) =>
-    request<{ message: string; user: AuthUser }>("/api/auth/me", {
+    request<{ message?: string; user?: any } | any>("/api/auth/me", {
       method: "PUT",
       body: JSON.stringify(payload),
-    }),
+    }).then((res) => ({
+      message: String((res as any)?.message || "Cap nhat ho so thanh cong"),
+      user: mapAuthUser((res as any)?.user ?? res),
+    })),
 
   changePassword: (payload: ChangePasswordPayload) =>
     request<{ message: string }>("/api/auth/change-password", {
@@ -522,7 +531,7 @@ export const api = {
       friends: (res.friends || []).map((friend) => ({
         id: Number(friend?.id || 0),
         name: String(friend?.fullName || "Người dùng"),
-        avatarUrl: friend?.avatarUrl || undefined,
+        avatarUrl: resolveAssetUrl(friend?.avatarUrl) || undefined,
         status: String(friend?.status || "pending"),
         requestedByMe: Boolean(friend?.requestedByMe),
       })),

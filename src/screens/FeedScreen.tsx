@@ -36,10 +36,10 @@ export function FeedScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
   const [composerMode, setComposerMode] = useState<"create" | "edit">("create");
   const [editingPost, setEditingPost] = useState<FeedPost | null>(null);
+  const isLoadingMore = false;
   const [hiddenPostIds, setHiddenPostIds] = useState<Record<string, boolean>>(
     {},
   );
@@ -112,16 +112,6 @@ export function FeedScreen({
     setRefreshing(true);
     loadFeed();
   };
-
-  const handleLoadMore = useCallback(async () => {
-    if (isLoading || refreshing || isLoadingMore) return;
-    setIsLoadingMore(true);
-    try {
-      await loadFeed();
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [isLoading, refreshing, isLoadingMore, loadFeed]);
 
   const handleLike = async (post: FeedPost) => {
     try {
@@ -289,10 +279,6 @@ export function FeedScreen({
           />
         )}
         contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-        onEndReachedThreshold={0.4}
-        onEndReached={() => {
-          void handleLoadMore();
-        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Text,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import "./src/global.css";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
@@ -55,6 +56,13 @@ export default function App() {
       setIsRestoring(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const token = authStore.getTokens()?.accessToken;
+    if (!token) return;
+    getSocket(token);
+  }, [user]);
 
   const handleLogin = useCallback((loggedInUser: AuthUser) => {
     disconnectSocket();
@@ -219,7 +227,7 @@ export default function App() {
             activeOpacity={0.8}
             onPress={() => setActiveTab("ai-chat")}
           >
-            <Text className="text-2xl">🤖</Text>
+            <Feather name="cpu" size={22} color="#ffffff" />
           </TouchableOpacity>
         ) : null}
         <AppNavigator activeTab={activeTab} onTabChange={handleTabChange} />

@@ -171,8 +171,11 @@ export function useConversationCompose({
       return;
     }
 
-    if (groupMemberIds.length === 0) {
-      Alert.alert("Thieu thanh vien", "Nhom can it nhat 1 thanh vien khac.");
+    if (groupMemberIds.length < 2) {
+      Alert.alert(
+        "Thieu thanh vien",
+        "Nhom can it nhat 3 nguoi (ban va 2 thanh vien khac).",
+      );
       return;
     }
 

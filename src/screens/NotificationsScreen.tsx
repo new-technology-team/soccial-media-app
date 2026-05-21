@@ -3,7 +3,7 @@ import { View, FlatList, RefreshControl } from "react-native";
 import { TopBar } from "../components/common/TopBar";
 import { EmptyState } from "../components/common/EmptyState";
 import { NotificationItem } from "../components/notifications/NotificationItem";
-import { api } from "../lib/api";
+import { api, authStore, getSocket } from "../lib";
 import type { Notification } from "../types";
 
 interface NotificationsScreenProps {
@@ -38,6 +38,35 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
 
     return () => clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    const token = authStore.getTokens()?.accessToken;
+    if (!token) return;
+
+    const socket = getSocket(token);
+    const onRealtimeNotification = (payload: any) => {
+      const next: Notification = {
+        id: String(payload?.id || Date.now()),
+        type: payload?.type ? String(payload.type) : "general",
+        title: String(payload?.title || "Thong bao"),
+        body: payload?.body ? String(payload.body) : undefined,
+        isRead: Boolean(payload?.isRead ?? payload?.is_read ?? false),
+        is_read: Boolean(payload?.isRead ?? payload?.is_read ?? false),
+        meta: payload?.meta || null,
+        createdAt: String(payload?.createdAt || new Date().toISOString()),
+      };
+
+      setNotifications((prev) => {
+        const deduped = prev.filter((item) => item.id !== next.id);
+        return [next, ...deduped];
+      });
+    };
+
+    socket.on("notification:new", onRealtimeNotification);
+    return () => {
+      socket.off("notification:new", onRealtimeNotification);
+    };
+  }, []);
 
   const handlePressNotification = async (item: Notification) => {
     const isRead = Boolean(item.isRead ?? item.is_read);

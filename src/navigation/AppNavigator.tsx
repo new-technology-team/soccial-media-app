@@ -1,20 +1,20 @@
 import React from "react";
 import { View, Text, TouchableOpacity } from "react-native";
-import type { AuthUser } from "../types";
+import { Feather } from "@expo/vector-icons";
 
 interface Tab {
   key: string;
   label: string;
-  icon: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
 }
 
 const TABS: Tab[] = [
-  { key: "feed", label: "Bảng tin", icon: "🏠" },
-  { key: "search", label: "Tìm kiếm", icon: "🔍" },
-  { key: "messages", label: "Tin nhắn", icon: "💬" },
-  { key: "friends", label: "Bạn bè", icon: "👥" },
-  { key: "notifications", label: "Thông báo", icon: "🔔" },
-  { key: "profile", label: "Hồ sơ", icon: "👤" },
+  { key: "feed", label: "Bang tin", icon: "home" },
+  { key: "search", label: "Tim kiem", icon: "search" },
+  { key: "messages", label: "Tin nhan", icon: "message-circle" },
+  { key: "friends", label: "Ban be", icon: "users" },
+  { key: "notifications", label: "Thong bao", icon: "bell" },
+  { key: "profile", label: "Ho so", icon: "user" },
 ];
 
 interface AppNavigatorProps {
@@ -30,6 +30,7 @@ export function AppNavigator({ activeTab, onTabChange }: AppNavigatorProps) {
     >
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
+        const color = isActive ? "#0052ce" : "#6b7280";
         return (
           <TouchableOpacity
             key={tab.key}
@@ -37,12 +38,12 @@ export function AppNavigator({ activeTab, onTabChange }: AppNavigatorProps) {
             onPress={() => onTabChange(tab.key)}
             activeOpacity={0.7}
           >
-            {isActive && (
+            {isActive ? (
               <View className="absolute top-1 w-1 h-1 rounded-full bg-primary" />
-            )}
-            <Text className="text-2xl">{tab.icon}</Text>
+            ) : null}
+            <Feather name={tab.icon} size={20} color={color} />
             <Text
-              className={`text-[10px] font-semibold mt-0.5 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+              className={`text-[10px] font-semibold mt-1 ${isActive ? "text-primary" : "text-muted-foreground"}`}
             >
               {tab.label}
             </Text>
