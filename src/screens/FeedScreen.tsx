@@ -110,7 +110,7 @@ export function FeedScreen({
 
   const handleRefresh = () => {
     setRefreshing(true);
-    loadFeed();
+    void loadFeed();
   };
 
   const handleLike = async (post: FeedPost) => {
@@ -228,6 +228,8 @@ export function FeedScreen({
         const res = await api.createPost(payload);
         setPosts((prev) => [res.post, ...prev]);
       }
+      // Keep UI responsive (optimistic update) and refresh in background for sync.
+      void loadFeed();
       setEditingPost(null);
       setComposerMode("create");
     } catch (err) {

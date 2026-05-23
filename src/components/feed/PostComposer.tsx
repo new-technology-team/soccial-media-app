@@ -91,7 +91,7 @@ export function PostComposer({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.8,
+        quality: 0.6,
         base64: true,
       });
 
@@ -100,6 +100,15 @@ export function PostComposer({
       const asset = result.assets[0];
       if (!asset.base64) {
         Alert.alert("Upload thất bại", "Không đọc được dữ liệu ảnh.");
+        return;
+      }
+
+      const approxBytes = Math.floor((asset.base64.length * 3) / 4);
+      if (approxBytes > 10 * 1024 * 1024) {
+        Alert.alert(
+          "Upload that bai",
+          "Anh qua lon. Vui long chon anh nho hon 10MB.",
+        );
         return;
       }
 

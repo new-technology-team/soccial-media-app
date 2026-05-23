@@ -28,6 +28,7 @@ export function MessagesScreen({
   const [conversationKeyword, setConversationKeyword] = useState("");
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
+  const createdConversationIdsRef = useRef<Set<string>>(new Set());
 
   const filteredConversations = useMemo(() => {
     const q = conversationKeyword.trim().toLowerCase();
@@ -55,7 +56,14 @@ export function MessagesScreen({
   const loadConversations = useCallback(async () => {
     try {
       const res = await api.listConversations();
-      setConversations(res.conversations || []);
+      const normalized = (res.conversations || []).filter((item) => {
+        const hasLastMessage = Boolean(String(item.lastMessage || "").trim());
+        const hasUnread = Number(item.unreadCount || 0) > 0;
+        const isNamedGroup = Boolean(item.isGroup && String(item.name || "").trim());
+        const wasCreatedLocally = createdConversationIdsRef.current.has(item.id);
+        return hasLastMessage || hasUnread || isNamedGroup || wasCreatedLocally;
+      });
+      setConversations(normalized);
     } catch {
       /* silent */
     } finally {
@@ -78,6 +86,7 @@ export function MessagesScreen({
   }, [loadConversations]);
 
   const upsertConversation = useCallback((conversation: Conversation) => {
+    createdConversationIdsRef.current.add(conversation.id);
     setConversations((prev) => {
       const found = prev.find((item) => item.id === conversation.id);
       if (!found) return [conversation, ...prev];
@@ -89,6 +98,7 @@ export function MessagesScreen({
 
   const openConversation = useCallback(
     async (conversation: Conversation) => {
+      createdConversationIdsRef.current.add(conversation.id);
       setSelectedConv(conversation);
       setConversations((prev) =>
         prev.map((item) =>
@@ -128,7 +138,10 @@ export function MessagesScreen({
 
       setConversations((prev) => {
         const target = prev.find((item) => item.id === normalized.conversationId);
-        if (!target) return prev;
+        if (!target) {
+          void loadConversations();
+          return prev;
+        }
 
         const nextUnread =
           activeConversationIdRef.current === normalized.conversationId
@@ -150,7 +163,7 @@ export function MessagesScreen({
     return () => {
       socket.off("message:new", onMessageNew);
     };
-  }, []);
+  }, [loadConversations]);
 
   useEffect(() => {
     const socket = socketRef.current;

@@ -32,7 +32,73 @@ const REQUEST_TIMEOUT_MS = Number(
   process.env.EXPO_PUBLIC_API_TIMEOUT_MS || 20000,
 );
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+type HttpResult = {
+  status: number;
+  responseText: string;
+};
+
+function performHttpRequest(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+): Promise<HttpResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open((options.method || "GET").toUpperCase(), url, true);
+    xhr.timeout = timeoutMs;
+
+    const requestHeaders = new Headers(options.headers || {});
+    requestHeaders.forEach((value, key) => {
+      xhr.setRequestHeader(key, value);
+    });
+
+    xhr.onload = () => {
+      const status = Number(xhr.status || 0);
+      if (!Number.isFinite(status) || status < 200 || status > 599) {
+        reject(new Error(`NETWORK_STATUS_INVALID:${status || "unknown"}`));
+        return;
+      }
+      resolve({
+        status,
+        responseText: String(xhr.responseText || ""),
+      });
+    };
+
+    xhr.onerror = () => reject(new Error("NETWORK_REQUEST_FAILED"));
+    xhr.ontimeout = () => reject(new Error("NETWORK_TIMEOUT"));
+    xhr.onabort = () => reject(new Error("NETWORK_ABORTED"));
+
+    if (options.body !== undefined && options.body !== null) {
+      xhr.send(options.body as any);
+    } else {
+      xhr.send();
+    }
+  });
+}
+
+function normalizeNetworkError(error: Error): string {
+  if (error.message === "NETWORK_TIMEOUT") {
+    const connectionHint = API_URL.includes("10.0.2.2")
+      ? " Neu ban dung Expo Go tren dien thoai that, doi EXPO_PUBLIC_API_URL sang IP LAN cua may tinh (vi du http://192.168.x.x:5000)."
+      : "";
+    return `Khong nhan duoc phan hoi tu server sau ${Math.round(REQUEST_TIMEOUT_MS / 1000)} giay. Kiem tra API URL: ${API_URL}.${connectionHint}`;
+  }
+
+  if (
+    error.message === "NETWORK_REQUEST_FAILED" ||
+    error.message === "NETWORK_ABORTED" ||
+    error.message.startsWith("NETWORK_STATUS_INVALID")
+  ) {
+    return `Khong the ket noi den server (${API_URL}). Kiem tra backend dang chay va EXPO_PUBLIC_API_URL phu hop thiet bi.`;
+  }
+
+  return error.message;
+}
+
+async function requestWithXhr<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const headers = new Headers(options.headers || {});
   const tokens = authStore.getTokens();
 
@@ -41,7 +107,64 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (tokens?.accessToken) {
-    headers.set("Authorization", `Bearer ${tokens.accessToken}`);
+    headers.set("Authorization", `Bearer ${tokens?.accessToken}`);
+  }
+
+  const url = `${API_URL}${path}`;
+
+  let result: HttpResult;
+  try {
+    result = await performHttpRequest(
+      url,
+      {
+        ...options,
+        headers,
+      },
+      REQUEST_TIMEOUT_MS,
+    );
+  } catch (error: any) {
+    if (error instanceof Error) {
+      throw new Error(normalizeNetworkError(error));
+    }
+    throw new Error(
+      `Khong the ket noi den server (${API_URL}). Kiem tra backend dang chay va EXPO_PUBLIC_API_URL phu hop thiet bi.`,
+    );
+  }
+
+  let data: any = {};
+  if (result.responseText) {
+    try {
+      data = JSON.parse(result.responseText);
+    } catch {
+      data = {};
+    }
+  }
+
+  if (result.status < 200 || result.status >= 300) {
+    const detailedMessage =
+      data?.message ||
+      data?.issues?.[0]?.message ||
+      data?.issues?.[0]?.path?.join?.(".") ||
+      `Request failed with status ${result.status}`;
+    throw new Error(String(detailedMessage));
+  }
+
+  return data as T;
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  return requestWithXhr<T>(path, options);
+
+  /*
+  const headers = new Headers(options.headers || {});
+  const tokens = authStore.getTokens();
+
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (tokens?.accessToken) {
+    headers.set("Authorization", `Bearer ${tokens?.accessToken}`);
   }
 
   const timeoutId = setTimeout(() => undefined, REQUEST_TIMEOUT_MS);
@@ -52,7 +175,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options,
       headers,
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Error && error.name === "AbortError") {
       const connectionHint = API_URL.includes("10.0.2.2")
         ? " Nếu bạn dùng Expo Go trên điện thoại thật, hãy đổi EXPO_PUBLIC_API_URL sang IP LAN của máy tính (ví dụ http://192.168.100.116:5000)."
@@ -82,6 +205,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   return data as T;
+  */
 }
 
 function toStringId(value: unknown): string {

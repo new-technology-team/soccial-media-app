@@ -68,8 +68,10 @@ export default function App() {
     disconnectSocket();
     setUser(loggedInUser);
     setActiveTab("feed");
-    const token = authStore.getTokens()?.accessToken || "";
-    getSocket(token, () => console.log("Socket connected"));
+    const token = authStore.getTokens()?.accessToken;
+    if (token) {
+      getSocket(token, () => console.log("Socket connected"));
+    }
   }, []);
 
   const handleLogout = useCallback(async () => {

@@ -86,7 +86,7 @@ export function ProfileScreen({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.8,
+        quality: 0.6,
         base64: true,
       });
 
@@ -94,6 +94,12 @@ export function ProfileScreen({
       const asset = result.assets[0];
       if (!asset.base64) {
         setStatus("Khong doc duoc du lieu anh");
+        return;
+      }
+
+      const approxBytes = Math.floor((asset.base64.length * 3) / 4);
+      if (approxBytes > 10 * 1024 * 1024) {
+        setStatus("Anh qua lon. Vui long chon anh nho hon 10MB");
         return;
       }
 
@@ -158,33 +164,37 @@ export function ProfileScreen({
       />
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
-        <View className="items-center mb-6">
-          <Avatar name={fullName || user.fullName} avatarUrl={avatarUrl} size="lg" />
-          <Text className="mt-3 text-lg font-bold text-foreground">
-            {fullName || user.fullName}
-          </Text>
-          <Text className="text-muted-foreground text-xs">{user.email || user.phone}</Text>
+        <Card style={{ marginBottom: 12 }}>
+          <View className="items-center">
+            <Avatar name={fullName || user.fullName} avatarUrl={avatarUrl} size="lg" />
+            <Text className="mt-3 text-lg font-bold text-foreground">
+              {fullName || user.fullName}
+            </Text>
+            <Text className="text-muted-foreground text-xs">
+              {user.email || user.phone || "Tai khoan ZChat"}
+            </Text>
 
-          <TouchableOpacity
-            className="mt-2 rounded-full border border-border bg-surface-secondary px-3 py-1.5"
-            onPress={() => {
-              void handleChangeAvatar();
-            }}
-            disabled={isUploadingAvatar}
-            activeOpacity={0.8}
-          >
-            <View className="flex-row items-center">
-              {isUploadingAvatar ? (
-                <ActivityIndicator size="small" color="#0052ce" />
-              ) : (
-                <Feather name="camera" size={14} color="#0052ce" />
-              )}
-              <Text className="text-primary font-semibold text-xs ml-2">
-                {isUploadingAvatar ? "Dang upload..." : "Doi avatar"}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              className="mt-3 rounded-full border border-border bg-surface-secondary px-3 py-2"
+              onPress={() => {
+                void handleChangeAvatar();
+              }}
+              disabled={isUploadingAvatar}
+              activeOpacity={0.8}
+            >
+              <View className="flex-row items-center">
+                {isUploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#0052ce" />
+                ) : (
+                  <Feather name="camera" size={14} color="#0052ce" />
+                )}
+                <Text className="text-primary font-semibold text-xs ml-2">
+                  {isUploadingAvatar ? "Dang upload..." : "Doi avatar"}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </Card>
 
         <Card style={{ marginBottom: 12 }}>
           <Text className="text-base font-bold text-foreground mb-4">Thong tin ca nhan</Text>
