@@ -303,9 +303,23 @@ function mapConversation(raw: any): Conversation {
     }),
   );
 
+  const members = (raw?.members || []).map((member: any) => ({
+    userId: Number(member?.userId || 0),
+    fullName: String(
+      member?.fullName || member?.displayName || member?.name || "Nguoi dung",
+    ),
+    avatarUrl: resolveAssetUrl(member?.avatarUrl) || null,
+    role: member?.role ? String(member.role) : undefined,
+    notificationsEnabled:
+      member?.notificationsEnabled === undefined
+        ? undefined
+        : Boolean(member.notificationsEnabled),
+  }));
+
   return {
     id: toStringId(raw?.id ?? raw?._id),
     name: raw?.name || null,
+    type: raw?.type || (raw?.isGroup ? "group" : "direct"),
     isGroup:
       String(raw?.type || "").toLowerCase() === "group" ||
       Boolean(raw?.isGroup),
@@ -313,6 +327,18 @@ function mapConversation(raw: any): Conversation {
     lastMessageAt:
       lastMessage?.createdAt || raw?.lastMessageAt || raw?.updatedAt,
     unreadCount: Number(raw?.unreadCount || 0),
+    viewerSettings: {
+      notificationsEnabled: Boolean(
+        raw?.viewerSettings?.notificationsEnabled ?? true,
+      ),
+    },
+    directPeerId:
+      raw?.directPeerId === undefined || raw?.directPeerId === null
+        ? null
+        : Number(raw?.directPeerId),
+    isBlockedByMe: Boolean(raw?.isBlockedByMe ?? false),
+    isBlockedMe: Boolean(raw?.isBlockedMe ?? false),
+    members,
     participants,
   };
 }
@@ -428,6 +454,12 @@ export const api = {
 
   logout: () =>
     request<{ message: string }>("/api/auth/logout", { method: "POST" }),
+
+  deleteAccount: (currentPassword: string) =>
+    request<{ message: string }>("/api/auth/delete-account", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword }),
+    }),
 
   // Feed / Posts
   listFeed: () =>
@@ -569,6 +601,25 @@ export const api = {
       body: JSON.stringify(payload),
     }).then((res) => ({ conversation: mapConversation(res.conversation) })),
 
+  getConversationDetail: (conversationId: string | number) =>
+    request<{ conversation: any }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}`,
+    ).then((res) => ({
+      conversation: mapConversation(res.conversation),
+    })),
+
+  toggleConversationNotifications: (
+    conversationId: string | number,
+    enabled: boolean,
+  ) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/notifications`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      },
+    ),
+
   // Messages
   listMessages: (conversationId: string | number) =>
     request<{ messages: any[] }>(
@@ -646,6 +697,8 @@ export const api = {
           | "friends",
         friendshipId: res.relationship?.friendshipId || null,
         requestedByMe: Boolean(res.relationship?.requestedByMe),
+        isBlockedByMe: Boolean(res.relationship?.isBlockedByMe),
+        isBlockedMe: Boolean(res.relationship?.isBlockedMe),
       },
     })),
 
@@ -698,6 +751,16 @@ export const api = {
 
   removeFriend: (userId: number) =>
     request<{ message: string }>(`/api/social/friends/${userId}`, {
+      method: "DELETE",
+    }),
+
+  blockUser: (userId: number) =>
+    request<{ message: string }>(`/api/social/users/${userId}/block`, {
+      method: "POST",
+    }),
+
+  unblockUser: (userId: number) =>
+    request<{ message: string }>(`/api/social/users/${userId}/block`, {
       method: "DELETE",
     }),
 

@@ -36,6 +36,7 @@ export default function App() {
     userId: number;
     returnTab: string;
   } | null>(null);
+  const [aiReturnTab, setAiReturnTab] = useState("feed");
   const [isRestoring, setIsRestoring] = useState(true);
 
   useEffect(() => {
@@ -133,6 +134,14 @@ export default function App() {
     setActiveTab(tab);
   }, []);
 
+  const openAIChat = useCallback(
+    (returnTab: string) => {
+      setAiReturnTab(returnTab);
+      setActiveTab("ai-chat");
+    },
+    [],
+  );
+
   if (isRestoring) {
     return <Loading message="Đang khôi phục phiên..." />;
   }
@@ -148,7 +157,7 @@ export default function App() {
           <FeedScreen
             user={user}
             onLogout={handleLogout}
-            onOpenAIChat={() => setActiveTab("ai-chat")}
+            onOpenAIChat={() => openAIChat("feed")}
             focusPostId={feedFocusPostId}
             openCommentsPostId={feedOpenCommentsPostId}
             onRouteConsumed={handleFeedRouteConsumed}
@@ -159,7 +168,7 @@ export default function App() {
           <SearchScreen
             onOpenPost={openPostInFeed}
             onOpenUserProfile={openUserProfile}
-            onOpenAIChat={() => setActiveTab("ai-chat")}
+            onOpenAIChat={() => openAIChat("search")}
           />
         );
       case "messages":
@@ -169,6 +178,7 @@ export default function App() {
             initialDirectUserId={messageTarget?.userId}
             initialDirectRouteKey={messageTarget?.routeKey}
             onInitialDirectHandled={handleMessageRouteConsumed}
+            onOpenUserProfile={openUserProfile}
           />
         );
       case "friends":
@@ -180,7 +190,13 @@ export default function App() {
           />
         );
       case "ai-chat":
-        return <AIChatScreen />;
+        return (
+          <AIChatScreen
+            onExit={() => {
+              setActiveTab(aiReturnTab || "feed");
+            }}
+          />
+        );
       case "user-profile":
         return profileRoute ? (
           <UserProfileScreen
@@ -221,7 +237,7 @@ export default function App() {
           <FeedScreen
             user={user}
             onLogout={handleLogout}
-            onOpenAIChat={() => setActiveTab("ai-chat")}
+            onOpenAIChat={() => openAIChat("feed")}
             focusPostId={feedFocusPostId}
             openCommentsPostId={feedOpenCommentsPostId}
             onRouteConsumed={handleFeedRouteConsumed}
@@ -230,15 +246,19 @@ export default function App() {
     }
   };
 
+  const hideNavigator = activeTab === "ai-chat";
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View className="flex-1 bg-background">
         <StatusBar />
         {renderScreen()}
-        <AppNavigator
-          activeTab={activeTab === "profile-settings" ? "profile" : activeTab}
-          onTabChange={handleTabChange}
-        />
+        {!hideNavigator ? (
+          <AppNavigator
+            activeTab={activeTab === "profile-settings" ? "profile" : activeTab}
+            onTabChange={handleTabChange}
+          />
+        ) : null}
       </View>
     </TouchableWithoutFeedback>
   );

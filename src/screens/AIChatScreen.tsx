@@ -20,6 +20,10 @@ interface ChatMessage {
   createdAt: string;
 }
 
+interface AIChatScreenProps {
+  onExit?: () => void;
+}
+
 const WELCOME_MSG: ChatMessage = {
   id: "welcome",
   role: "ai",
@@ -78,7 +82,7 @@ function TypingDots() {
   );
 }
 
-export function AIChatScreen() {
+export function AIChatScreen({ onExit }: AIChatScreenProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -253,6 +257,14 @@ export function AIChatScreen() {
       {/* Header */}
       <TopBar
         title="ZChat AI"
+        leftAction={
+          onExit
+            ? {
+                label: "Quay lai",
+                onPress: onExit,
+              }
+            : undefined
+        }
         rightAction={
           <View
             style={{

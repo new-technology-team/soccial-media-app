@@ -1,14 +1,21 @@
-import React from 'react';
-import { View, TextInput, TouchableOpacity, Text } from 'react-native';
+import React from "react";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
 
 interface MessageInputProps {
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-export function MessageInput({ value, onChangeText, onSend, placeholder = 'Nhắn tin...' }: MessageInputProps) {
+export function MessageInput({
+  value,
+  onChangeText,
+  onSend,
+  placeholder = "Nhan tin...",
+  disabled = false,
+}: MessageInputProps) {
   return (
     <View className="flex-row items-center px-4 py-3 bg-surface border-t border-border">
       <TextInput
@@ -18,15 +25,16 @@ export function MessageInput({ value, onChangeText, onSend, placeholder = 'Nhắ
         value={value}
         onChangeText={onChangeText}
         multiline
+        editable={!disabled}
       />
       <TouchableOpacity
-        className="ml-3 bg-primary rounded-xl px-5 py-2.5 items-center justify-center"
+        className={`ml-3 rounded-xl px-5 py-2.5 items-center justify-center ${disabled ? "bg-primary/40" : "bg-primary"}`}
         onPress={onSend}
+        disabled={disabled}
         activeOpacity={0.7}
       >
-        <Text className="text-white font-bold text-sm">Gửi</Text>
+        <Text className="text-white font-bold text-sm">Gui</Text>
       </TouchableOpacity>
     </View>
   );
 }
-

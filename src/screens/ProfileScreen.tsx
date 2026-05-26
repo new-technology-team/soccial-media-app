@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Keyboard,
   Modal,
   Pressable,
@@ -41,6 +42,7 @@ export function ProfileScreen({
   const [newPassword, setNewPassword] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [status, setStatus] = useState("");
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
@@ -151,6 +153,40 @@ export function ProfileScreen({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!currentPassword.trim()) {
+      setStatus("Nhap mat khau hien tai de xoa tai khoan");
+      return;
+    }
+
+    Alert.alert(
+      "Xoa tai khoan",
+      "Tai khoan se bi xoa va khong the dang nhap lai. Ban co chac chan?",
+      [
+        { text: "Huy", style: "cancel" },
+        {
+          text: "Xoa tai khoan",
+          style: "destructive",
+          onPress: async () => {
+            setIsDeletingAccount(true);
+            setStatus("");
+            try {
+              await api.deleteAccount(currentPassword.trim());
+              setShowSettingsModal(false);
+              onLogout();
+            } catch (err) {
+              setStatus(
+                err instanceof Error ? err.message : "Khong the xoa tai khoan",
+              );
+            } finally {
+              setIsDeletingAccount(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -313,6 +349,27 @@ export function ProfileScreen({
                   }}
                   loading={isSaving}
                 />
+
+                <Pressable
+                  className="mt-3"
+                  onPress={() => {
+                    void handleDeleteAccount();
+                  }}
+                  disabled={isDeletingAccount}
+                >
+                  <View className="h-11 rounded-xl border border-red-200 bg-red-50 flex-row items-center justify-center">
+                    {isDeletingAccount ? (
+                      <ActivityIndicator size="small" color="#dc2626" />
+                    ) : (
+                      <>
+                        <Feather name="trash-2" size={14} color="#dc2626" />
+                        <Text className="text-danger font-semibold text-sm ml-2">
+                          Xoa tai khoan
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                </Pressable>
 
                 <Pressable className="mt-4" onPress={onLogout}>
                   <View className="h-11 rounded-xl border border-red-200 bg-red-50 flex-row items-center justify-center">

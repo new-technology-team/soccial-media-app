@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, RefreshControl, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { ConversationItem } from "../components/chat/ConversationItem";
 import { MessageBubble } from "../components/chat/MessageBubble";
 import { MessageInput } from "../components/chat/MessageInput";
@@ -18,6 +28,7 @@ export function MessagesScreen({
   initialDirectUserId,
   initialDirectRouteKey,
   onInitialDirectHandled,
+  onOpenUserProfile,
 }: MessagesScreenProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +37,12 @@ export function MessagesScreen({
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
   const [conversationKeyword, setConversationKeyword] = useState("");
+  const [showConversationMenu, setShowConversationMenu] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [conversationDetail, setConversationDetail] = useState<Conversation | null>(null);
+  const [isLoadingConversationDetail, setIsLoadingConversationDetail] =
+    useState(false);
+  const [isMutatingConversation, setIsMutatingConversation] = useState(false);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
@@ -109,6 +126,26 @@ export function MessagesScreen({
     },
     [loadMessages],
   );
+
+  const loadConversationDetail = useCallback(async (conversationId: string) => {
+    setIsLoadingConversationDetail(true);
+    try {
+      const res = await api.getConversationDetail(conversationId);
+      setConversationDetail(res.conversation);
+      setSelectedConv((prev) =>
+        prev && prev.id === conversationId ? { ...prev, ...res.conversation } : prev,
+      );
+      setConversations((prev) =>
+        prev.map((item) =>
+          item.id === conversationId ? { ...item, ...res.conversation } : item,
+        ),
+      );
+    } catch {
+      setConversationDetail(null);
+    } finally {
+      setIsLoadingConversationDetail(false);
+    }
+  }, []);
 
   useEffect(() => {
     const token = authStore.getTokens()?.accessToken;
@@ -207,6 +244,16 @@ export function MessagesScreen({
     activeConversationIdRef.current = nextId;
   }, [selectedConv?.id]);
 
+  useEffect(() => {
+    if (!selectedConv?.id) {
+      setConversationDetail(null);
+      setShowConversationMenu(false);
+      setShowMembersModal(false);
+      return;
+    }
+    void loadConversationDetail(selectedConv.id);
+  }, [loadConversationDetail, selectedConv?.id]);
+
   const {
     showComposeModal,
     composeMode,
@@ -295,6 +342,74 @@ export function MessagesScreen({
     [selectedConv, user.id],
   );
 
+  const activeConversation = conversationDetail || selectedConv;
+  const peerUserId = useMemo(() => {
+    if (!activeConversation || activeConversation.isGroup) return null;
+    if (typeof activeConversation.directPeerId === "number") {
+      return activeConversation.directPeerId;
+    }
+    const directPeer = (activeConversation.participants || []).find(
+      (item) => Number(item.userId) !== Number(user.id),
+    );
+    return directPeer ? Number(directPeer.userId) : null;
+  }, [activeConversation, user.id]);
+
+  const conversationNotificationsEnabled = Boolean(
+    activeConversation?.viewerSettings?.notificationsEnabled ?? true,
+  );
+
+  const handleToggleNotifications = useCallback(async () => {
+    if (!selectedConv) return;
+    setIsMutatingConversation(true);
+    try {
+      await api.toggleConversationNotifications(
+        selectedConv.id,
+        !conversationNotificationsEnabled,
+      );
+      await loadConversationDetail(selectedConv.id);
+      setShowConversationMenu(false);
+    } catch (err) {
+      Alert.alert(
+        "Khong cap nhat duoc",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsMutatingConversation(false);
+    }
+  }, [
+    conversationNotificationsEnabled,
+    loadConversationDetail,
+    selectedConv,
+  ]);
+
+  const handleToggleBlockPeer = useCallback(async () => {
+    if (!selectedConv || !peerUserId) return;
+    setIsMutatingConversation(true);
+    try {
+      if (activeConversation?.isBlockedByMe) {
+        await api.unblockUser(peerUserId);
+      } else {
+        await api.blockUser(peerUserId);
+      }
+      await loadConversationDetail(selectedConv.id);
+      void loadConversations();
+      setShowConversationMenu(false);
+    } catch (err) {
+      Alert.alert(
+        "Khong the cap nhat chan tin nhan",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsMutatingConversation(false);
+    }
+  }, [
+    activeConversation?.isBlockedByMe,
+    loadConversationDetail,
+    loadConversations,
+    peerUserId,
+    selectedConv,
+  ]);
+
   return (
     <View className="flex-1 bg-background">
       <TopBar
@@ -318,7 +433,15 @@ export function MessagesScreen({
             >
               <Text className="text-white text-xs font-semibold">+ Nhom</Text>
             </TouchableOpacity>
-          ) : undefined
+          ) : (
+            <TouchableOpacity
+              className="w-9 h-9 rounded-full bg-surface-secondary border border-border items-center justify-center"
+              onPress={() => setShowConversationMenu(true)}
+              activeOpacity={0.8}
+            >
+              <Feather name="alert-circle" size={16} color="#374151" />
+            </TouchableOpacity>
+          )
         }
       />
 
@@ -401,6 +524,20 @@ export function MessagesScreen({
               value={messageText}
               onChangeText={setMessageText}
               onSend={handleSend}
+              disabled={Boolean(
+                !activeConversation?.isGroup &&
+                  (activeConversation?.isBlockedByMe ||
+                    activeConversation?.isBlockedMe),
+              )}
+              placeholder={
+                !activeConversation?.isGroup &&
+                activeConversation?.isBlockedByMe
+                  ? "Ban dang chan nguoi nay"
+                  : !activeConversation?.isGroup &&
+                      activeConversation?.isBlockedMe
+                    ? "Ban da bi chan tin nhan"
+                    : "Nhan tin..."
+              }
             />
           </View>
         </View>
@@ -428,6 +565,169 @@ export function MessagesScreen({
           void handleCreateGroup();
         }}
       />
+
+      <Modal
+        visible={showConversationMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConversationMenu(false)}
+      >
+        <View className="flex-1 bg-black/35 justify-end">
+          <View className="bg-surface rounded-t-3xl px-4 py-4 border-t border-border">
+            <View className="w-10 h-1 bg-border rounded-full self-center mb-4" />
+
+            <Text className="text-foreground text-base font-bold mb-3">
+              Tuy chon cuoc tro chuyen
+            </Text>
+
+            {isLoadingConversationDetail ? (
+              <View className="py-3 items-center">
+                <ActivityIndicator color="#0052ce" />
+              </View>
+            ) : null}
+
+            {!activeConversation?.isGroup && peerUserId ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+                onPress={() => {
+                  setShowConversationMenu(false);
+                  onOpenUserProfile?.(peerUserId);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="user" size={16} color="#111827" />
+                <Text className="ml-3 text-sm font-medium text-foreground">
+                  Xem trang ca nhan
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {activeConversation?.isGroup ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+                onPress={() => {
+                  setShowConversationMenu(false);
+                  setShowMembersModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="users" size={16} color="#111827" />
+                <Text className="ml-3 text-sm font-medium text-foreground">
+                  Xem thanh vien
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+              onPress={() => {
+                void handleToggleNotifications();
+              }}
+              disabled={isMutatingConversation}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name={conversationNotificationsEnabled ? "bell" : "bell-off"}
+                size={16}
+                color="#111827"
+              />
+              <Text className="ml-3 text-sm font-medium text-foreground">
+                {conversationNotificationsEnabled
+                  ? "Tat thong bao cuoc tro chuyen"
+                  : "Bat thong bao cuoc tro chuyen"}
+              </Text>
+            </TouchableOpacity>
+
+            {!activeConversation?.isGroup && peerUserId ? (
+              <TouchableOpacity
+                className={`h-12 rounded-xl border px-4 mb-2 flex-row items-center ${
+                  activeConversation?.isBlockedByMe
+                    ? "border-border bg-surface-secondary"
+                    : "border-red-200 bg-red-50"
+                }`}
+                onPress={() => {
+                  void handleToggleBlockPeer();
+                }}
+                disabled={isMutatingConversation || Boolean(activeConversation?.isBlockedMe)}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name={activeConversation?.isBlockedByMe ? "unlock" : "slash"}
+                  size={16}
+                  color={activeConversation?.isBlockedByMe ? "#111827" : "#dc2626"}
+                />
+                <Text
+                  className={`ml-3 text-sm font-medium ${
+                    activeConversation?.isBlockedByMe
+                      ? "text-foreground"
+                      : "text-danger"
+                  }`}
+                >
+                  {activeConversation?.isBlockedByMe ? "Bo chan tin nhan" : "Chan tin nhan"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              className="h-11 rounded-xl items-center justify-center mt-2"
+              onPress={() => setShowConversationMenu(false)}
+              activeOpacity={0.8}
+            >
+              <Text className="text-sm font-semibold text-muted-foreground">Dong</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showMembersModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMembersModal(false)}
+      >
+        <View className="flex-1 bg-black/35 items-center justify-center px-6">
+          <View className="w-full max-h-[80%] rounded-2xl bg-surface border border-border p-4">
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-base font-bold text-foreground">
+                Thanh vien nhom
+              </Text>
+              <TouchableOpacity onPress={() => setShowMembersModal(false)}>
+                <Feather name="x" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={activeConversation?.members || []}
+              keyExtractor={(item) => String(item.userId)}
+              renderItem={({ item }) => (
+                <View className="py-2.5 border-b border-border flex-row items-center justify-between">
+                  <View className="flex-row items-center">
+                    <View className="w-8 h-8 rounded-full bg-surface-secondary items-center justify-center mr-3">
+                      <Text className="text-xs text-foreground font-semibold">
+                        {String(item.fullName || "U")
+                          .trim()
+                          .slice(0, 1)
+                          .toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text className="text-sm text-foreground">{item.fullName}</Text>
+                  </View>
+                  {item.role ? (
+                    <Text className="text-xs text-muted-foreground">{item.role}</Text>
+                  ) : null}
+                </View>
+              )}
+              ListEmptyComponent={
+                <View className="py-6 items-center">
+                  <Text className="text-sm text-muted-foreground">
+                    Khong co thanh vien de hien thi
+                  </Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
