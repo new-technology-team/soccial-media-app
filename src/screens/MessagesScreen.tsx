@@ -234,18 +234,16 @@ export function MessagesScreen({
         }
         leftAction={
           selectedConv
-            ? { label: "← Quay lai", onPress: () => setSelectedConv(null) }
+            ? { label: "Quay lai", onPress: () => setSelectedConv(null) }
             : undefined
         }
         rightAction={
           !selectedConv ? (
             <TouchableOpacity
               className="px-3 py-1.5 rounded-full bg-primary"
-              onPress={() => openCompose(mode === "groups" ? "group" : "direct")}
+              onPress={() => openCompose("group")}
             >
-              <Text className="text-white text-xs font-semibold">
-                {mode === "groups" ? "+ Nhom" : "+ Moi"}
-              </Text>
+              <Text className="text-white text-xs font-semibold">+ Nhom</Text>
             </TouchableOpacity>
           ) : undefined
         }
@@ -287,7 +285,7 @@ export function MessagesScreen({
             ListEmptyComponent={
               !isLoading ? (
                 <EmptyState
-                  icon="💬"
+                  icon="Chat"
                   title={
                     conversationKeyword.trim().length
                       ? "Khong tim thay cuoc tro chuyen phu hop"

@@ -79,19 +79,18 @@ export function PostComposer({
 
   const handlePickImage = async () => {
     try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          "Thiếu quyền truy cập",
-          "Vui lòng cho phép ứng dụng truy cập thư viện ảnh.",
+          "Thieu quyen truy cap",
+          "Vui long cho phep ung dung truy cap thu vien anh.",
         );
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.6,
+        quality: 0.55,
         base64: true,
       });
 
@@ -99,15 +98,15 @@ export function PostComposer({
 
       const asset = result.assets[0];
       if (!asset.base64) {
-        Alert.alert("Upload thất bại", "Không đọc được dữ liệu ảnh.");
+        Alert.alert("Upload that bai", "Khong doc duoc du lieu anh.");
         return;
       }
 
       const approxBytes = Math.floor((asset.base64.length * 3) / 4);
-      if (approxBytes > 10 * 1024 * 1024) {
+      if (approxBytes > 8 * 1024 * 1024) {
         Alert.alert(
           "Upload that bai",
-          "Anh qua lon. Vui long chon anh nho hon 10MB.",
+          "Anh qua lon. Vui long chon anh nho hon 8MB.",
         );
         return;
       }
@@ -120,14 +119,14 @@ export function PostComposer({
       });
 
       if (!uploaded.fileUrl) {
-        throw new Error("Không nhận được URL ảnh từ server.");
+        throw new Error("Khong nhan duoc URL anh tu server.");
       }
 
       setMediaUrl(uploaded.fileUrl);
     } catch (err) {
       Alert.alert(
-        "Upload thất bại",
-        err instanceof Error ? err.message : "Không thể upload ảnh",
+        "Upload that bai",
+        err instanceof Error ? err.message : "Khong the upload anh",
       );
     } finally {
       setIsUploadingMedia(false);
@@ -158,10 +157,10 @@ export function PostComposer({
             <View className="bg-surface rounded-t-3xl p-6 pb-8">
               <View className="flex-row justify-between items-center mb-4">
                 <TouchableOpacity onPress={onClose}>
-                  <Text className="text-muted-foreground text-sm">Hủy</Text>
+                  <Text className="text-muted-foreground text-sm">Huy</Text>
                 </TouchableOpacity>
                 <Text className="text-base font-bold text-foreground">
-                  {mode === "edit" ? "Chỉnh sửa bài viết" : "Tạo bài viết"}
+                  {mode === "edit" ? "Chinh sua bai viet" : "Tao bai viet"}
                 </Text>
                 <TouchableOpacity
                   onPress={handleSubmit}
@@ -171,10 +170,10 @@ export function PostComposer({
                     className={`font-bold text-sm ${content.trim() || mediaUrl.trim() ? "text-primary" : "text-muted-foreground"}`}
                   >
                     {isPosting
-                      ? "Đang lưu..."
+                      ? "Dang luu..."
                       : mode === "edit"
-                        ? "Lưu"
-                        : "Đăng"}
+                        ? "Luu"
+                        : "Dang"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -186,7 +185,7 @@ export function PostComposer({
                     {userName}
                   </Text>
                   <Text className="text-muted-foreground text-xs">
-                    {visibility === "public" ? "🌐 Công khai" : "🔒 Riêng tư"}
+                    {visibility === "public" ? "Cong khai" : "Rieng tu"}
                   </Text>
                 </View>
               </View>
@@ -199,7 +198,7 @@ export function PostComposer({
                   <Text
                     className={`text-xs font-semibold ${visibility === "public" ? "text-white" : "text-foreground"}`}
                   >
-                    🌐 Công khai
+                    Cong khai
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -209,7 +208,7 @@ export function PostComposer({
                   <Text
                     className={`text-xs font-semibold ${visibility === "private" ? "text-white" : "text-foreground"}`}
                   >
-                    🔒 Riêng tư
+                    Rieng tu
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -217,7 +216,7 @@ export function PostComposer({
               <View className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
                 <TextInput
                   className="min-h-30 max-h-55 text-sm text-foreground text-start"
-                  placeholder="Bạn đang nghĩ gì?"
+                  placeholder="Ban dang nghi gi?"
                   placeholderTextColor="#7e8592"
                   multiline
                   value={content}
@@ -232,14 +231,14 @@ export function PostComposer({
                 activeOpacity={0.7}
               >
                 <Text className="text-xs text-primary font-semibold">
-                  Ẩn bàn phím
+                  An ban phim
                 </Text>
               </TouchableOpacity>
 
               <View className="rounded-xl border border-border bg-surface-secondary px-4 mt-3">
                 <TextInput
                   className="h-11 text-sm text-foreground"
-                  placeholder="Dán link ảnh/video (tùy chọn)"
+                  placeholder="Dan link anh/video (tuy chon)"
                   placeholderTextColor="#7e8592"
                   value={mediaUrl}
                   onChangeText={setMediaUrl}
@@ -258,8 +257,8 @@ export function PostComposer({
                 >
                   <Text className="text-foreground text-xs font-semibold">
                     {isUploadingMedia
-                      ? "Đang upload ảnh..."
-                      : "Chọn ảnh từ máy"}
+                      ? "Dang upload anh..."
+                      : "Chon anh tu may"}
                   </Text>
                 </TouchableOpacity>
                 {isUploadingMedia ? (

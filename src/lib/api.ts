@@ -450,10 +450,10 @@ export const api = {
   },
 
   createPost: (payload: CreatePostPayload) =>
-    request<{ post: any }>("/api/social/posts", {
+    request<any>("/api/social/posts", {
       method: "POST",
       body: JSON.stringify(payload),
-    }).then((res) => ({ post: mapFeedPost(res.post) })),
+    }).then((res) => ({ post: mapFeedPost((res as any)?.post ?? res) })),
 
   updatePost: (
     postId: string | number,
@@ -463,38 +463,38 @@ export const api = {
       visibility?: "public" | "private";
     },
   ) =>
-    request<{ message: string; post: any }>(
+    request<any>(
       `/api/social/posts/${encodeURIComponent(String(postId))}`,
       {
         method: "PATCH",
         body: JSON.stringify(payload),
       },
     ).then((res) => ({
-      message: res.message,
-      post: mapFeedPost(res.post),
+      message: String((res as any)?.message || "Cap nhat bai viet thanh cong"),
+      post: mapFeedPost((res as any)?.post ?? res),
     })),
 
   getPost: (postId: string | number) =>
-    request<{ post: any }>(
+    request<any>(
       `/api/social/posts/${encodeURIComponent(String(postId))}`,
-    ).then((res) => ({ post: mapFeedPost(res.post) })),
+    ).then((res) => ({ post: mapFeedPost((res as any)?.post ?? res) })),
 
   reactPost: (postId: string | number, type: string = "like") =>
-    request<{ post: any }>(
+    request<any>(
       `/api/social/posts/${encodeURIComponent(String(postId))}/reaction`,
       {
         method: "POST",
         body: JSON.stringify({ type }),
       },
-    ).then((res) => ({ post: mapFeedPost(res.post) })),
+    ).then((res) => ({ post: mapFeedPost((res as any)?.post ?? res) })),
 
   unreactPost: (postId: string | number) =>
-    request<{ post: any }>(
+    request<any>(
       `/api/social/posts/${encodeURIComponent(String(postId))}/reaction`,
       {
         method: "DELETE",
       },
-    ).then((res) => ({ post: mapFeedPost(res.post) })),
+    ).then((res) => ({ post: mapFeedPost((res as any)?.post ?? res) })),
 
   deletePost: (postId: string | number) =>
     request<{ message: string }>(

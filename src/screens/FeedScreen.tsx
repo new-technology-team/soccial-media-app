@@ -14,7 +14,7 @@ import { Avatar } from "../components/common/Avatar";
 import { PostCard } from "../components/feed/PostCard";
 import { PostComposer } from "../components/feed/PostComposer";
 import { PostCommentsScreen } from "../components/feed/PostCommentsScreen";
-import { api } from "../lib/api";
+import { api, authStore, getSocket } from "../lib";
 import type { AuthUser, FeedPost } from "../types";
 
 interface FeedScreenProps {
@@ -45,6 +45,7 @@ export function FeedScreen({
   );
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
   const previousAvatarRef = useRef<string | null | undefined>(user.avatarUrl);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const commentsPost = commentsPostId
     ? posts.find((item) => item.id === commentsPostId) || null
@@ -54,11 +55,11 @@ export function FeedScreen({
 
   const loadFeed = useCallback(async () => {
     try {
+      setError("");
       const res = await api.listFeed();
       setPosts(res.posts || []);
     } catch (err) {
-      console.error("Failed to load feed", err);
-      setError(err instanceof Error ? err.message : "Tải bảng tin thất bại");
+      setError(err instanceof Error ? err.message : "Tai bang tin that bai");
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -66,7 +67,7 @@ export function FeedScreen({
   }, []);
 
   useEffect(() => {
-    loadFeed();
+    void loadFeed();
   }, [loadFeed]);
 
   useEffect(() => {
@@ -74,6 +75,35 @@ export function FeedScreen({
     previousAvatarRef.current = user.avatarUrl;
     void loadFeed();
   }, [user.avatarUrl, loadFeed]);
+
+  useEffect(() => {
+    const token = authStore.getTokens()?.accessToken;
+    if (!token) return;
+
+    const socket = getSocket(token);
+    socket.emit("join-feed");
+
+    const refreshFromRealtime = () => {
+      if (realtimeRefreshTimerRef.current) return;
+      realtimeRefreshTimerRef.current = setTimeout(() => {
+        realtimeRefreshTimerRef.current = null;
+        void loadFeed();
+      }, 450);
+    };
+
+    socket.on("post:new", refreshFromRealtime);
+    socket.on("comment:new", refreshFromRealtime);
+
+    return () => {
+      socket.off("post:new", refreshFromRealtime);
+      socket.off("comment:new", refreshFromRealtime);
+      socket.emit("leave-feed");
+      if (realtimeRefreshTimerRef.current) {
+        clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+    };
+  }, [loadFeed]);
 
   useEffect(() => {
     const targetPostId = openCommentsPostId || focusPostId;
@@ -132,12 +162,12 @@ export function FeedScreen({
   };
 
   const handleShare = (post: FeedPost) => {
-    Alert.alert("Chia sẻ", `Chia sẻ bài viết của ${post.authorName}?`);
+    Alert.alert("Chia se", `Chia se bai viet cua ${post.authorName}?`);
   };
 
   const handleHidePost = (post: FeedPost) => {
     setHiddenPostIds((prev) => ({ ...prev, [post.id]: true }));
-    Alert.alert("Đã ẩn", "Bài viết đã được ẩn khỏi bảng tin của bạn.");
+    Alert.alert("Da an", "Bai viet da duoc an khoi bang tin cua ban.");
   };
 
   const handleReportPost = async (post: FeedPost) => {
@@ -145,23 +175,23 @@ export function FeedScreen({
       await api.submitReport({
         targetType: "post",
         targetId: post.id,
-        reason: "Nội dung không phù hợp trên bảng tin",
-        details: `Bài viết từ ${post.authorName}`,
+        reason: "Noi dung khong phu hop tren bang tin",
+        details: `Bai viet tu ${post.authorName}`,
       });
-      Alert.alert("Đã báo cáo", "Cảm ơn bạn đã gửi phản hồi.");
+      Alert.alert("Da bao cao", "Cam on ban da gui phan hoi.");
     } catch (err) {
       Alert.alert(
-        "Báo cáo thất bại",
-        err instanceof Error ? err.message : "Không thể gửi báo cáo",
+        "Bao cao that bai",
+        err instanceof Error ? err.message : "Khong the gui bao cao",
       );
     }
   };
 
   const handleDelete = async (post: FeedPost) => {
-    Alert.alert("Xóa bài viết", "Bạn có chắc muốn xóa?", [
-      { text: "Hủy", style: "cancel" },
+    Alert.alert("Xoa bai viet", "Ban co chac muon xoa?", [
+      { text: "Huy", style: "cancel" },
       {
-        text: "Xóa",
+        text: "Xoa",
         style: "destructive",
         onPress: async () => {
           try {
@@ -169,8 +199,8 @@ export function FeedScreen({
             setPosts((prev) => prev.filter((p) => p.id !== post.id));
           } catch (err) {
             Alert.alert(
-              "Xóa thất bại",
-              err instanceof Error ? err.message : "Không thể xóa bài viết",
+              "Xoa that bai",
+              err instanceof Error ? err.message : "Khong the xoa bai viet",
             );
           }
         },
@@ -181,9 +211,9 @@ export function FeedScreen({
   const handleOpenPostMenu = (post: FeedPost) => {
     const isOwner = post.authorId === user.id;
     if (isOwner) {
-      Alert.alert("Tùy chọn bài viết", "Chọn thao tác", [
+      Alert.alert("Tuy chon bai viet", "Chon thao tac", [
         {
-          text: "Chỉnh sửa",
+          text: "Chinh sua",
           onPress: () => {
             setEditingPost(post);
             setComposerMode("edit");
@@ -191,25 +221,25 @@ export function FeedScreen({
           },
         },
         {
-          text: "Xóa",
+          text: "Xoa",
           style: "destructive",
           onPress: () => handleDelete(post),
         },
-        { text: "Hủy", style: "cancel" },
+        { text: "Huy", style: "cancel" },
       ]);
       return;
     }
 
-    Alert.alert("Tùy chọn bài viết", "Chọn thao tác", [
-      { text: "Ẩn bài viết", onPress: () => handleHidePost(post) },
+    Alert.alert("Tuy chon bai viet", "Chon thao tac", [
+      { text: "An bai viet", onPress: () => handleHidePost(post) },
       {
-        text: "Báo cáo bài viết",
+        text: "Bao cao bai viet",
         style: "destructive",
         onPress: () => {
           void handleReportPost(post);
         },
       },
-      { text: "Hủy", style: "cancel" },
+      { text: "Huy", style: "cancel" },
     ]);
   };
 
@@ -228,14 +258,13 @@ export function FeedScreen({
         const res = await api.createPost(payload);
         setPosts((prev) => [res.post, ...prev]);
       }
-      // Keep UI responsive (optimistic update) and refresh in background for sync.
       void loadFeed();
       setEditingPost(null);
       setComposerMode("create");
     } catch (err) {
       Alert.alert(
-        composerMode === "edit" ? "Lưu thất bại" : "Đăng thất bại",
-        err instanceof Error ? err.message : "Không thể lưu bài viết",
+        composerMode === "edit" ? "Luu that bai" : "Dang that bai",
+        err instanceof Error ? err.message : "Khong the luu bai viet",
       );
       throw err;
     }
@@ -262,7 +291,7 @@ export function FeedScreen({
             className="px-3 py-1.5 rounded-full bg-red-50"
             onPress={onLogout}
           >
-            <Text className="text-danger font-semibold text-xs">Thoát</Text>
+            <Text className="text-danger font-semibold text-xs">Thoat</Text>
           </TouchableOpacity>
         }
       />
@@ -292,20 +321,19 @@ export function FeedScreen({
           isLoadingMore ? (
             <View className="items-center py-4">
               <Text className="text-xs text-muted-foreground">
-                Đang tải lại bảng tin...
+                Dang tai lai bang tin...
               </Text>
             </View>
           ) : (
             <View className="items-center py-3">
               <Text className="text-[11px] text-muted-foreground">
-                Cuộn xuống cuối để tải lại bài viết mới
+                Cuon xuong cuoi de tai lai bai viet moi
               </Text>
             </View>
           )
         }
         ListHeaderComponent={
           <>
-            {/* Composer */}
             <TouchableOpacity
               className="mb-3"
               onPress={() => {
@@ -323,14 +351,13 @@ export function FeedScreen({
                   />
                   <View className="flex-1 ml-4">
                     <Text className="text-muted-foreground text-sm bg-surface-secondary rounded-full px-4 py-2.5">
-                      Bạn đang nghĩ gì?
+                      Ban dang nghi gi?
                     </Text>
                   </View>
                 </View>
               </Card>
             </TouchableOpacity>
 
-            {/* Error */}
             {error ? (
               <View className="bg-red-50 border border-[#fecaca] rounded-xl px-4 py-3 mb-3">
                 <Text className="text-danger text-sm font-medium">{error}</Text>
@@ -341,9 +368,9 @@ export function FeedScreen({
         ListEmptyComponent={
           !isLoading ? (
             <EmptyState
-              icon="📝"
-              title="Chưa có bài viết nào"
-              subtitle="Hãy là người đầu tiên đăng bài!"
+              icon="Post"
+              title="Chua co bai viet nao"
+              subtitle="Hay la nguoi dau tien dang bai!"
             />
           ) : null
         }

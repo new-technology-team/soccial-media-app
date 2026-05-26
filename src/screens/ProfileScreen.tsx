@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   Modal,
+  Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -86,7 +89,7 @@ export function ProfileScreen({
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        quality: 0.6,
+        quality: 0.55,
         base64: true,
       });
 
@@ -98,8 +101,8 @@ export function ProfileScreen({
       }
 
       const approxBytes = Math.floor((asset.base64.length * 3) / 4);
-      if (approxBytes > 10 * 1024 * 1024) {
-        setStatus("Anh qua lon. Vui long chon anh nho hon 10MB");
+      if (approxBytes > 8 * 1024 * 1024) {
+        setStatus("Anh qua lon. Vui long chon anh nho hon 8MB");
         return;
       }
 
@@ -166,7 +169,11 @@ export function ProfileScreen({
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
         <Card style={{ marginBottom: 12 }}>
           <View className="items-center">
-            <Avatar name={fullName || user.fullName} avatarUrl={avatarUrl} size="lg" />
+            <Avatar
+              name={fullName || user.fullName}
+              avatarUrl={avatarUrl}
+              size="lg"
+            />
             <Text className="mt-3 text-lg font-bold text-foreground">
               {fullName || user.fullName}
             </Text>
@@ -197,7 +204,12 @@ export function ProfileScreen({
         </Card>
 
         <Card style={{ marginBottom: 12 }}>
-          <Text className="text-base font-bold text-foreground mb-4">Thong tin ca nhan</Text>
+          <Text className="text-base font-bold text-foreground mb-2">
+            Thong tin ca nhan
+          </Text>
+          <Text className="text-xs text-muted-foreground mb-4">
+            Cap nhat thong tin co ban de dong bo giua mobile va web.
+          </Text>
           <Input
             label="Ho va ten"
             placeholder="Ho va ten"
@@ -238,43 +250,67 @@ export function ProfileScreen({
         animationType="slide"
         onRequestClose={() => setShowSettingsModal(false)}
       >
-        <View className="flex-1 bg-black/40 justify-end">
-          <View className="bg-surface rounded-t-3xl px-4 pt-4 pb-6">
-            <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-foreground text-base font-bold">Cai dat tai khoan</Text>
-              <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
-                <Feather name="x" size={20} color="#6b7280" />
-              </TouchableOpacity>
-            </View>
+        <TouchableWithoutFeedback
+          onPress={() => {
+            Keyboard.dismiss();
+            setShowSettingsModal(false);
+          }}
+        >
+          <View className="flex-1 bg-black/40 justify-end">
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View className="bg-surface rounded-t-3xl px-4 pt-3 pb-6">
+                <View className="items-center mb-3">
+                  <View className="w-10 h-1 rounded-full bg-border" />
+                </View>
 
-            <Input
-              label="Mat khau hien tai"
-              placeholder="••••••••"
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              secureTextEntry
-            />
-            <Input
-              label="Mat khau moi"
-              placeholder="••••••••"
-              value={newPassword}
-              onChangeText={setNewPassword}
-              secureTextEntry
-            />
+                <View className="flex-row items-center justify-between mb-2">
+                  <Text className="text-foreground text-base font-bold">
+                    Cai dat tai khoan
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
+                    <Feather name="x" size={20} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
 
-            <Button
-              title={isSaving ? "Dang doi mat khau..." : "Doi mat khau"}
-              onPress={() => {
-                void handleChangePassword();
-              }}
-              loading={isSaving}
-            />
+                <Text className="text-xs text-muted-foreground mb-3">
+                  Doi mat khau va quan ly tai khoan trong khu vuc nay.
+                </Text>
 
-            <TouchableOpacity className="mt-4 px-4 py-3 items-center" onPress={onLogout}>
-              <Text className="text-danger font-bold text-base">Dang xuat</Text>
-            </TouchableOpacity>
+                <Input
+                  label="Mat khau hien tai"
+                  placeholder="********"
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                />
+                <Input
+                  label="Mat khau moi"
+                  placeholder="********"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                />
+
+                <Button
+                  title={isSaving ? "Dang doi mat khau..." : "Doi mat khau"}
+                  onPress={() => {
+                    void handleChangePassword();
+                  }}
+                  loading={isSaving}
+                />
+
+                <Pressable className="mt-4" onPress={onLogout}>
+                  <View className="h-11 rounded-xl border border-red-200 bg-red-50 flex-row items-center justify-center">
+                    <Feather name="log-out" size={14} color="#dc2626" />
+                    <Text className="text-danger font-semibold text-sm ml-2">
+                      Dang xuat
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );

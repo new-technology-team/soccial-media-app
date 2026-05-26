@@ -59,7 +59,7 @@ export function UserProfileScreen({
       setRelationship(profileRes.relationship.status);
       setPosts(postsRes.posts || []);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Không thể tải hồ sơ");
+      setStatus(err instanceof Error ? err.message : "Khong the tai ho so");
       setProfile(null);
       setPosts([]);
     } finally {
@@ -78,9 +78,9 @@ export function UserProfileScreen({
     try {
       await api.sendFriendRequest(profile.id);
       setRelationship("pending_sent");
-      setStatus("Đã gửi lời mời kết bạn");
+      setStatus("Da gui loi moi ket ban");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Không thể gửi lời mời");
+      setStatus(err instanceof Error ? err.message : "Khong the gui loi moi");
     } finally {
       setIsSubmitting(false);
     }
@@ -93,9 +93,11 @@ export function UserProfileScreen({
     try {
       await api.removeFriend(profile.id);
       setRelationship("none");
-      setStatus("Đã hủy kết nối");
+      setPosts([]);
+      void loadData();
+      setStatus("Da huy ket noi");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Không thể thực hiện");
+      setStatus(err instanceof Error ? err.message : "Khong the thuc hien");
     } finally {
       setIsSubmitting(false);
     }
@@ -108,9 +110,10 @@ export function UserProfileScreen({
     try {
       await api.acceptFriendRequest(profile.id);
       setRelationship("friends");
-      setStatus("Đã chấp nhận lời mời kết bạn");
+      void loadData();
+      setStatus("Da chap nhan loi moi ket ban");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Không thể chấp nhận");
+      setStatus(err instanceof Error ? err.message : "Khong the chap nhan");
     } finally {
       setIsSubmitting(false);
     }
@@ -123,9 +126,11 @@ export function UserProfileScreen({
     try {
       await api.rejectFriendRequest(profile.id);
       setRelationship("none");
-      setStatus("Đã từ chối lời mời");
+      setPosts([]);
+      void loadData();
+      setStatus("Da tu choi loi moi");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Không thể từ chối");
+      setStatus(err instanceof Error ? err.message : "Khong the tu choi");
     } finally {
       setIsSubmitting(false);
     }
@@ -135,7 +140,7 @@ export function UserProfileScreen({
     if (!profile) return;
     const reason = reportReason.trim();
     if (!reason) {
-      setStatus("Vui lòng nhập lý do báo cáo");
+      setStatus("Vui long nhap ly do bao cao");
       return;
     }
     setIsReporting(true);
@@ -149,9 +154,9 @@ export function UserProfileScreen({
       });
       setShowReportModal(false);
       setReportReason("");
-      setStatus("Đã gửi báo cáo tài khoản");
+      setStatus("Da gui bao cao tai khoan");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Không thể gửi báo cáo");
+      setStatus(err instanceof Error ? err.message : "Khong the gui bao cao");
     } finally {
       setIsReporting(false);
     }
@@ -160,22 +165,22 @@ export function UserProfileScreen({
   const relationshipLabel = useMemo(() => {
     switch (relationship) {
       case "friends":
-        return "Đã là bạn bè";
+        return "Da la ban be";
       case "pending_sent":
-        return "Đã gửi lời mời";
+        return "Da gui loi moi";
       case "pending_received":
-        return "Đang chờ xác nhận";
+        return "Dang cho xac nhan";
       case "self":
-        return "Tài khoản của bạn";
+        return "Tai khoan cua ban";
       default:
-        return "Chưa kết bạn";
+        return "Chua ket ban";
     }
   }, [relationship]);
 
   if (isLoading) {
     return (
       <View className="flex-1 bg-background">
-        <TopBar title="Hồ sơ người dùng" leftAction={{ label: "← Quay lại", onPress: onBack }} />
+        <TopBar title="Ho so nguoi dung" leftAction={{ label: "Quay lai", onPress: onBack }} />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0052ce" />
         </View>
@@ -186,9 +191,9 @@ export function UserProfileScreen({
   if (!profile) {
     return (
       <View className="flex-1 bg-background">
-        <TopBar title="Hồ sơ người dùng" leftAction={{ label: "← Quay lại", onPress: onBack }} />
+        <TopBar title="Ho so nguoi dung" leftAction={{ label: "Quay lai", onPress: onBack }} />
         <View className="flex-1 items-center justify-center px-8">
-          <Text className="text-foreground text-base font-semibold">Không tải được hồ sơ</Text>
+          <Text className="text-foreground text-base font-semibold">Khong tai duoc ho so</Text>
           {status ? (
             <Text className="text-muted-foreground text-sm text-center mt-2">{status}</Text>
           ) : null}
@@ -197,7 +202,7 @@ export function UserProfileScreen({
             onPress={() => void loadData()}
             activeOpacity={0.8}
           >
-            <Text className="text-white font-semibold">Thử lại</Text>
+            <Text className="text-white font-semibold">Thu lai</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -205,11 +210,11 @@ export function UserProfileScreen({
   }
 
   const showReportButton = relationship !== "self";
-  const canMessage = relationship === "friends" || relationship === "pending_sent" || relationship === "pending_received";
+  const canMessage = relationship === "friends";
 
   return (
     <View className="flex-1 bg-background">
-      <TopBar title="Hồ sơ người dùng" leftAction={{ label: "← Quay lại", onPress: onBack }} />
+      <TopBar title="Ho so nguoi dung" leftAction={{ label: "Quay lai", onPress: onBack }} />
 
       <FlatList
         data={posts}
@@ -221,7 +226,7 @@ export function UserProfileScreen({
                 <Avatar name={profile.fullName} avatarUrl={profile.avatarUrl} size="lg" />
                 <Text className="mt-3 text-lg font-bold text-foreground">{profile.fullName}</Text>
                 <Text className="text-xs text-muted-foreground mt-1">
-                  {profile.email || profile.phone || "Người dùng"}
+                  {profile.email || profile.phone || "Nguoi dung"}
                 </Text>
                 <View className="mt-3 px-3 py-1 rounded-full bg-surface-secondary border border-border">
                   <Text className="text-xs font-semibold text-primary">{relationshipLabel}</Text>
@@ -231,7 +236,7 @@ export function UserProfileScreen({
               <View className="mt-4 gap-2">
                 {relationship === "none" ? (
                   <Button
-                    title="Kết bạn"
+                    title="Ket ban"
                     onPress={() => void handleSendRequest()}
                     loading={isSubmitting}
                   />
@@ -239,7 +244,7 @@ export function UserProfileScreen({
 
                 {relationship === "pending_sent" ? (
                   <Button
-                    title="Hủy lời mời"
+                    title="Huy loi moi"
                     variant="secondary"
                     onPress={() => void handleCancelOrRemove()}
                     loading={isSubmitting}
@@ -250,14 +255,14 @@ export function UserProfileScreen({
                   <View className="flex-row gap-2">
                     <View className="flex-1">
                       <Button
-                        title="Chấp nhận"
+                        title="Chap nhan"
                         onPress={() => void handleAccept()}
                         loading={isSubmitting}
                       />
                     </View>
                     <View className="flex-1">
                       <Button
-                        title="Từ chối"
+                        title="Tu choi"
                         variant="secondary"
                         onPress={() => void handleReject()}
                         disabled={isSubmitting}
@@ -268,7 +273,7 @@ export function UserProfileScreen({
 
                 {relationship === "friends" ? (
                   <Button
-                    title="Hủy kết bạn"
+                    title="Huy ket ban"
                     variant="secondary"
                     onPress={() => void handleCancelOrRemove()}
                     loading={isSubmitting}
@@ -277,7 +282,7 @@ export function UserProfileScreen({
 
                 {canMessage && onMessageUser ? (
                   <Button
-                    title="Nhắn tin"
+                    title="Nhan tin"
                     onPress={() => onMessageUser(profile.id)}
                     disabled={isSubmitting}
                   />
@@ -285,7 +290,7 @@ export function UserProfileScreen({
 
                 {showReportButton ? (
                   <Button
-                    title="Báo cáo tài khoản"
+                    title="Bao cao tai khoan"
                     variant="ghost"
                     onPress={() => setShowReportModal(true)}
                     disabled={isSubmitting}
@@ -300,7 +305,7 @@ export function UserProfileScreen({
               </View>
             ) : null}
 
-            <Text className="text-base font-bold text-foreground mt-5 mb-2">Bài viết</Text>
+            <Text className="text-base font-bold text-foreground mt-5 mb-2">Bai viet</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -313,14 +318,14 @@ export function UserProfileScreen({
               {item.authorName} • {new Date(item.createdAt).toLocaleDateString()}
             </Text>
             <Text className="text-sm text-foreground" numberOfLines={3}>
-              {item.content || "Bài viết có media"}
+              {item.content || "Bai viet co media"}
             </Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View className="px-6 pb-10">
             <View className="rounded-2xl bg-surface-secondary border border-border px-4 py-6 items-center">
-              <Text className="text-muted-foreground text-sm">Chưa có bài viết công khai</Text>
+              <Text className="text-muted-foreground text-sm">Chua co bai viet cong khai</Text>
             </View>
           </View>
         }
@@ -335,14 +340,14 @@ export function UserProfileScreen({
       >
         <View className="flex-1 bg-black/45 items-center justify-center px-6">
           <View className="w-full rounded-2xl bg-surface border border-border p-4">
-            <Text className="text-base font-bold text-foreground">Báo cáo tài khoản</Text>
+            <Text className="text-base font-bold text-foreground">Bao cao tai khoan</Text>
             <Text className="text-sm text-muted-foreground mt-1">
-              Nhập lý do báo cáo để gửi cho quản trị viên.
+              Nhap ly do bao cao de gui cho quan tri vien.
             </Text>
             <TextInput
               value={reportReason}
               onChangeText={setReportReason}
-              placeholder="Lý do báo cáo..."
+              placeholder="Ly do bao cao..."
               placeholderTextColor="#7e8592"
               multiline
               style={{
@@ -360,7 +365,7 @@ export function UserProfileScreen({
             <View className="flex-row gap-2 mt-3">
               <View className="flex-1">
                 <Button
-                  title="Đóng"
+                  title="Dong"
                   variant="secondary"
                   onPress={() => setShowReportModal(false)}
                   disabled={isReporting}
@@ -368,7 +373,7 @@ export function UserProfileScreen({
               </View>
               <View className="flex-1">
                 <Button
-                  title={isReporting ? "Đang gửi..." : "Gửi báo cáo"}
+                  title={isReporting ? "Dang gui..." : "Gui bao cao"}
                   onPress={() => void handleReport()}
                   loading={isReporting}
                 />
