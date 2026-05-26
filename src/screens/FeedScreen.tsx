@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  FlatList,
-  RefreshControl,
+  ActivityIndicator,
   Alert,
+  FlatList,
+  Modal,
+  RefreshControl,
   Text,
+  TextInput,
   TouchableOpacity,
+  View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { TopBar } from "../components/common/TopBar";
 import { Card } from "../components/common/Card";
 import { EmptyState } from "../components/common/EmptyState";
@@ -20,14 +24,21 @@ import type { AuthUser, FeedPost } from "../types";
 interface FeedScreenProps {
   user: AuthUser;
   onLogout: () => void;
+  onOpenAIChat?: () => void;
   focusPostId?: string | null;
   openCommentsPostId?: string | null;
   onRouteConsumed?: () => void;
 }
 
+type ShareFriend = {
+  id: number;
+  name: string;
+};
+
 export function FeedScreen({
   user,
   onLogout,
+  onOpenAIChat,
   focusPostId,
   openCommentsPostId,
   onRouteConsumed,
@@ -45,7 +56,15 @@ export function FeedScreen({
   );
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null);
   const previousAvatarRef = useRef<string | null | undefined>(user.avatarUrl);
-  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const [sharePost, setSharePost] = useState<FeedPost | null>(null);
+  const [shareNote, setShareNote] = useState("");
+  const [shareFriends, setShareFriends] = useState<ShareFriend[]>([]);
+  const [isLoadingShareFriends, setIsLoadingShareFriends] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   const commentsPost = commentsPostId
     ? posts.find((item) => item.id === commentsPostId) || null
@@ -161,8 +180,76 @@ export function FeedScreen({
     setCommentsPostId(post.id);
   };
 
-  const handleShare = (post: FeedPost) => {
-    Alert.alert("Chia se", `Chia se bai viet cua ${post.authorName}?`);
+  const openShareModal = async (post: FeedPost) => {
+    setSharePost(post);
+    setShareNote("");
+    setIsLoadingShareFriends(true);
+    try {
+      const res = await api.listFriends();
+      setShareFriends((res.friends || []).map((friend) => ({
+        id: Number(friend.id),
+        name: String(friend.name || "Ban be"),
+      })));
+    } catch {
+      setShareFriends([]);
+    } finally {
+      setIsLoadingShareFriends(false);
+    }
+  };
+
+  const closeShareModal = () => {
+    setSharePost(null);
+    setShareNote("");
+    setShareFriends([]);
+    setIsSharing(false);
+  };
+
+  const shareToProfile = async () => {
+    if (!sharePost) return;
+    setIsSharing(true);
+    try {
+      const note = shareNote.trim();
+      const sourceContent = sharePost.content || "";
+      const composed = `Chia se bai viet cua ${sharePost.authorName}\n${note ? `${note}\n` : ""}${sourceContent}`.trim();
+      const res = await api.createPost({
+        content: composed || undefined,
+        mediaUrl: sharePost.mediaUrl || undefined,
+        visibility: "public",
+      });
+      setPosts((prev) => [res.post, ...prev]);
+      closeShareModal();
+      void loadFeed();
+    } catch (err) {
+      Alert.alert(
+        "Chia se that bai",
+        err instanceof Error ? err.message : "Khong the chia se bai viet",
+      );
+      setIsSharing(false);
+    }
+  };
+
+  const shareToFriend = async (friendId: number) => {
+    if (!sharePost) return;
+    setIsSharing(true);
+    try {
+      const direct = await api.createDirectConversation(friendId);
+      const note = shareNote.trim();
+      const lines = [
+        `Ban ${user.fullName} vua chia se mot bai viet`,
+        note || "",
+        sharePost.content || "",
+        sharePost.mediaUrl ? `Media: ${sharePost.mediaUrl}` : "",
+      ].filter(Boolean);
+      await api.sendMessage(direct.conversation.id, lines.join("\n"));
+      closeShareModal();
+      Alert.alert("Da chia se", "Da gui bai viet cho ban be.");
+    } catch (err) {
+      Alert.alert(
+        "Chia se that bai",
+        err instanceof Error ? err.message : "Khong the gui bai viet",
+      );
+      setIsSharing(false);
+    }
   };
 
   const handleHidePost = (post: FeedPost) => {
@@ -287,12 +374,21 @@ export function FeedScreen({
       <TopBar
         title="ZChat"
         rightAction={
-          <TouchableOpacity
-            className="px-3 py-1.5 rounded-full bg-red-50"
-            onPress={onLogout}
-          >
-            <Text className="text-danger font-semibold text-xs">Thoat</Text>
-          </TouchableOpacity>
+          <View className="flex-row items-center">
+            <TouchableOpacity
+              className="w-8 h-8 rounded-full bg-blue-50 items-center justify-center mr-2"
+              onPress={onOpenAIChat}
+              activeOpacity={0.8}
+            >
+              <Feather name="cpu" size={14} color="#0052ce" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="px-3 py-1.5 rounded-full bg-red-50"
+              onPress={onLogout}
+            >
+              <Text className="text-danger font-semibold text-xs">Thoat</Text>
+            </TouchableOpacity>
+          </View>
         }
       />
 
@@ -305,7 +401,9 @@ export function FeedScreen({
             currentUserId={user.id}
             onLike={() => handleLike(item)}
             onComment={() => handleComment(item)}
-            onShare={() => handleShare(item)}
+            onShare={() => {
+              void openShareModal(item);
+            }}
             onMenu={() => handleOpenPostMenu(item)}
           />
         )}
@@ -368,7 +466,7 @@ export function FeedScreen({
         ListEmptyComponent={
           !isLoading ? (
             <EmptyState
-              icon="Post"
+              icon="📝"
               title="Chua co bai viet nao"
               subtitle="Hay la nguoi dau tien dang bai!"
             />
@@ -396,6 +494,81 @@ export function FeedScreen({
         }}
         onPost={handlePost}
       />
+
+      <Modal
+        visible={Boolean(sharePost)}
+        transparent
+        animationType="slide"
+        onRequestClose={closeShareModal}
+      >
+        <View className="flex-1 bg-black/40 justify-end">
+          <View className="bg-surface rounded-t-3xl p-4 pb-6 max-h-[85%]">
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-base font-bold text-foreground">Chia se bai viet</Text>
+              <TouchableOpacity onPress={closeShareModal}>
+                <Feather name="x" size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              className="h-11 rounded-xl border border-border bg-surface-secondary px-4 text-sm text-foreground"
+              value={shareNote}
+              onChangeText={setShareNote}
+              placeholder="Them loi nhan (tuy chon)"
+              placeholderTextColor="#7e8592"
+            />
+
+            <TouchableOpacity
+              className={`mt-3 rounded-xl py-3 items-center ${isSharing ? "bg-primary/60" : "bg-primary"}`}
+              disabled={isSharing}
+              onPress={() => {
+                void shareToProfile();
+              }}
+            >
+              <Text className="text-white font-semibold text-sm">
+                Chia se len trang ca nhan
+              </Text>
+            </TouchableOpacity>
+
+            <Text className="text-sm text-foreground font-semibold mt-4 mb-2">
+              Chia se cho ban be
+            </Text>
+
+            {isLoadingShareFriends ? (
+              <View className="py-5 items-center">
+                <ActivityIndicator color="#0052ce" />
+              </View>
+            ) : (
+              <FlatList
+                data={shareFriends}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    className="px-3 py-3 rounded-xl border border-border bg-surface-secondary mb-2 flex-row items-center justify-between"
+                    disabled={isSharing}
+                    onPress={() => {
+                      void shareToFriend(item.id);
+                    }}
+                  >
+                    <Text className="text-sm text-foreground font-medium">
+                      {item.name}
+                    </Text>
+                    <Feather name="send" size={14} color="#0052ce" />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <EmptyState
+                    icon="👥"
+                    title="Chua co ban be de chia se"
+                    subtitle="Ket ban truoc khi gui bai viet qua tin nhan."
+                  />
+                }
+                style={{ maxHeight: 220 }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

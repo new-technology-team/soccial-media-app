@@ -31,7 +31,10 @@ export function useConversationCompose({
   const handledInitialDirectKey = useRef<number | undefined>(undefined);
 
   const acceptedFriends = useMemo(
-    () => friends.filter((item) => item.status === "accepted"),
+    () =>
+      friends.filter(
+        (item) => String(item.status || "").toLowerCase() === "accepted",
+      ),
     [friends],
   );
 

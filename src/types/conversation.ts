@@ -15,6 +15,8 @@ export type Message = {
   senderName: string;
   content: string;
   createdAt: string;
+  isRecalled?: boolean;
+  isRemovedForMe?: boolean;
 };
 
 export type SendMessagePayload = {

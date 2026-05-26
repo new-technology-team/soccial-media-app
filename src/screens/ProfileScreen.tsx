@@ -24,12 +24,14 @@ interface ProfileScreenProps {
   user: AuthUser;
   onLogout: () => void;
   onUserUpdated?: (user: AuthUser) => void;
+  onBack?: () => void;
 }
 
 export function ProfileScreen({
   user,
   onLogout,
   onUserUpdated,
+  onBack,
 }: ProfileScreenProps) {
   const [fullName, setFullName] = useState(user.fullName);
   const [dateOfBirth, setDateOfBirth] = useState(user.dateOfBirth || "");
@@ -154,15 +156,18 @@ export function ProfileScreen({
   return (
     <View className="flex-1 bg-background">
       <TopBar
-        title="Ho so"
+        title="Cai dat"
+        leftAction={onBack ? { label: "Quay lai", onPress: onBack } : undefined}
         rightAction={
-          <TouchableOpacity
-            className="w-10 h-10 items-end justify-center"
-            onPress={() => setShowSettingsModal(true)}
-            activeOpacity={0.75}
-          >
-            <Feather name="settings" size={18} color="#4b5563" />
-          </TouchableOpacity>
+          !onBack ? (
+            <TouchableOpacity
+              className="w-10 h-10 items-end justify-center"
+              onPress={() => setShowSettingsModal(true)}
+              activeOpacity={0.75}
+            >
+              <Feather name="settings" size={18} color="#4b5563" />
+            </TouchableOpacity>
+          ) : undefined
         }
       />
 
@@ -235,6 +240,16 @@ export function ProfileScreen({
             }}
             loading={isSaving}
           />
+
+          <TouchableOpacity
+            className="mt-3 h-11 rounded-xl border border-border bg-surface-secondary items-center justify-center"
+            onPress={() => setShowSettingsModal(true)}
+            activeOpacity={0.8}
+          >
+            <Text className="text-sm font-semibold text-foreground">
+              Quan ly tai khoan va mat khau
+            </Text>
+          </TouchableOpacity>
         </Card>
 
         {status ? (

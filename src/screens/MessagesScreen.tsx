@@ -125,6 +125,7 @@ export function MessagesScreen({
         senderName: String(payload?.senderName || "Nguoi dung"),
         content: String(payload?.content ?? payload?.text ?? ""),
         createdAt: String(payload?.createdAt || new Date().toISOString()),
+        isRecalled: Boolean(payload?.isRecalled),
       };
 
       if (!normalized.id || !normalized.conversationId) return;
@@ -159,11 +160,35 @@ export function MessagesScreen({
       });
     };
 
+    const onMessageUpdated = (payload: any) => {
+      const messageId = String(payload?.id || "");
+      if (!messageId) return;
+
+      if (Number(payload?.removedForUserId || 0) === Number(user.id)) {
+        setMessages((prev) => prev.filter((item) => item.id !== messageId));
+        return;
+      }
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === messageId
+            ? {
+                ...item,
+                content: String(payload?.content ?? "Tin nhan da duoc thu hoi"),
+                isRecalled: Boolean(payload?.isRecalled ?? true),
+              }
+            : item,
+        ),
+      );
+    };
+
     socket.on("message:new", onMessageNew);
+    socket.on("message:updated", onMessageUpdated);
     return () => {
       socket.off("message:new", onMessageNew);
+      socket.off("message:updated", onMessageUpdated);
     };
-  }, [loadConversations]);
+  }, [loadConversations, user.id]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -221,6 +246,54 @@ export function MessagesScreen({
       );
     }
   }, [messageText, selectedConv]);
+
+  const handleLongPressMessage = useCallback(
+    (message: Message) => {
+      if (!selectedConv) return;
+      if (message.senderId !== user.id) return;
+      if (message.isRecalled) return;
+
+      Alert.alert("Thu hoi tin nhan", "Chon pham vi thu hoi", [
+        { text: "Huy", style: "cancel" },
+        {
+          text: "Thu hoi ben toi",
+          onPress: async () => {
+            try {
+              const res = await api.recallMessage(selectedConv.id, message.id, "me");
+              if (res.removed) {
+                setMessages((prev) => prev.filter((item) => item.id !== message.id));
+              }
+            } catch (err) {
+              Alert.alert(
+                "Khong the thu hoi",
+                err instanceof Error ? err.message : "Vui long thu lai",
+              );
+            }
+          },
+        },
+        {
+          text: "Thu hoi tat ca",
+          onPress: async () => {
+            try {
+              const res = await api.recallMessage(selectedConv.id, message.id, "all");
+              const recalledMessage = res.message;
+              if (recalledMessage) {
+                setMessages((prev) =>
+                  prev.map((item) => (item.id === message.id ? recalledMessage : item)),
+                );
+              }
+            } catch (err) {
+              Alert.alert(
+                "Khong the thu hoi",
+                err instanceof Error ? err.message : "Vui long thu lai",
+              );
+            }
+          },
+        },
+      ]);
+    },
+    [selectedConv, user.id],
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -285,7 +358,7 @@ export function MessagesScreen({
             ListEmptyComponent={
               !isLoading ? (
                 <EmptyState
-                  icon="Chat"
+                  icon="💬"
                   title={
                     conversationKeyword.trim().length
                       ? "Khong tim thay cuoc tro chuyen phu hop"
@@ -311,7 +384,11 @@ export function MessagesScreen({
             data={messages}
             keyExtractor={(item) => String(item.id)}
             renderItem={({ item }) => (
-              <MessageBubble message={item} currentUserId={user.id} />
+              <MessageBubble
+                message={item}
+                currentUserId={user.id}
+                onLongPress={handleLongPressMessage}
+              />
             )}
             contentContainerStyle={{
               flexGrow: 1,

@@ -4,10 +4,7 @@ import {
   StatusBar,
   TouchableWithoutFeedback,
   Keyboard,
-  TouchableOpacity,
-  Text,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import "./src/global.css";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
@@ -18,6 +15,7 @@ import { UserProfileScreen } from "./src/screens/UserProfileScreen";
 import { SearchScreen } from "./src/screens/SearchScreen";
 import { AIChatScreen } from "./src/screens/AIChatScreen";
 import { FriendsScreen } from "./src/screens/FriendsScreen";
+import { MyProfileScreen } from "./src/screens/MyProfileScreen";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { Loading } from "./src/components/common/Loading";
 import { api, authStore, getSocket, disconnectSocket } from "./src/lib";
@@ -112,10 +110,16 @@ export default function App() {
 
   const openUserProfile = useCallback(
     (userId: number) => {
+      if (!user) return;
+      if (userId === user.id) {
+        setProfileRoute(null);
+        setActiveTab("profile");
+        return;
+      }
       setProfileRoute({ userId, returnTab: activeTab });
       setActiveTab("user-profile");
     },
-    [activeTab],
+    [activeTab, user],
   );
 
   const handleBackFromUserProfile = useCallback(() => {
@@ -144,6 +148,7 @@ export default function App() {
           <FeedScreen
             user={user}
             onLogout={handleLogout}
+            onOpenAIChat={() => setActiveTab("ai-chat")}
             focusPostId={feedFocusPostId}
             openCommentsPostId={feedOpenCommentsPostId}
             onRouteConsumed={handleFeedRouteConsumed}
@@ -196,10 +201,19 @@ export default function App() {
         return <NotificationsScreen onOpenPost={openPostInFeed} />;
       case "profile":
         return (
+          <MyProfileScreen
+            user={user}
+            onOpenSettings={() => setActiveTab("profile-settings")}
+            onOpenPost={openPostInFeed}
+          />
+        );
+      case "profile-settings":
+        return (
           <ProfileScreen
             user={user}
             onLogout={handleLogout}
             onUserUpdated={(nextUser) => setUser(nextUser)}
+            onBack={() => setActiveTab("profile")}
           />
         );
       default:
@@ -207,6 +221,7 @@ export default function App() {
           <FeedScreen
             user={user}
             onLogout={handleLogout}
+            onOpenAIChat={() => setActiveTab("ai-chat")}
             focusPostId={feedFocusPostId}
             openCommentsPostId={feedOpenCommentsPostId}
             onRouteConsumed={handleFeedRouteConsumed}
@@ -220,19 +235,10 @@ export default function App() {
       <View className="flex-1 bg-background">
         <StatusBar />
         {renderScreen()}
-        {activeTab !== "ai-chat" &&
-        activeTab !== "messages" &&
-        activeTab !== "user-profile" ? (
-          <TouchableOpacity
-            className="absolute right-4 rounded-full bg-primary shadow-lg items-center justify-center"
-            style={{ bottom: 86, width: 56, height: 56 }}
-            activeOpacity={0.8}
-            onPress={() => setActiveTab("ai-chat")}
-          >
-            <Feather name="cpu" size={22} color="#ffffff" />
-          </TouchableOpacity>
-        ) : null}
-        <AppNavigator activeTab={activeTab} onTabChange={handleTabChange} />
+        <AppNavigator
+          activeTab={activeTab === "profile-settings" ? "profile" : activeTab}
+          onTabChange={handleTabChange}
+        />
       </View>
     </TouchableWithoutFeedback>
   );

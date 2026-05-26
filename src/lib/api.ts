@@ -325,6 +325,8 @@ function mapMessage(raw: any): Message {
     senderName: String(raw?.senderName || raw?.senderFullName || "Người dùng"),
     content: String(raw?.content ?? raw?.text ?? ""),
     createdAt: String(raw?.createdAt || new Date().toISOString()),
+    isRecalled: Boolean(raw?.isRecalled),
+    isRemovedForMe: Boolean(raw?.isRemovedForMe),
   };
 }
 
@@ -583,6 +585,23 @@ export const api = {
         body: JSON.stringify({ type: "text", text: content }),
       },
     ).then((res) => ({ message: mapMessage(res.message) })),
+
+  recallMessage: (
+    conversationId: string | number,
+    messageId: string | number,
+    scope: "me" | "all",
+  ) =>
+    request<any>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages/${encodeURIComponent(String(messageId))}/recall`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ scope }),
+      },
+    ).then((res) => ({
+      removed: Boolean((res as any)?.removed),
+      id: String((res as any)?.id || (res as any)?.message?.id || messageId),
+      message: (res as any)?.message ? mapMessage((res as any).message) : null,
+    })),
 
   // Notifications
   notifications: () =>
