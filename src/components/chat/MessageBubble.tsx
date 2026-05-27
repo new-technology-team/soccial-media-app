@@ -66,8 +66,12 @@ export function MessageBubble({
   }, [message.meta, message.type]);
   const hidePlaceholderText =
     !message.isRecalled &&
-    ((message.type === "image" && textValue.trim() === "[Anh]") ||
-      (message.type === "file" && textValue.trim().startsWith("[Tep]")));
+    ((message.type === "image" &&
+      Boolean(String(message.mediaUrl || "").trim()) &&
+      textValue.trim() === "[Anh]") ||
+      (message.type === "file" &&
+        Boolean(String(message.mediaUrl || "").trim()) &&
+        textValue.trim().startsWith("[Tep]")));
 
   const handleOpenFile = async () => {
     const fileUrl = String(message.mediaUrl || "").trim();

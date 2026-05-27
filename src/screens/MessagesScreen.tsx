@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
+import { Buffer } from "buffer";
 import { Feather } from "@expo/vector-icons";
 import { ConversationItem } from "../components/chat/ConversationItem";
 import { MessageBubble } from "../components/chat/MessageBubble";
@@ -23,6 +24,60 @@ import type { Conversation, Message } from "../types";
 import { ComposeConversationModal } from "./messages/components";
 import { useConversationCompose } from "./messages/hooks";
 import type { MessagesScreenProps } from "./messages/types";
+
+const DEFAULT_API_URL = "http://10.0.2.2:5000";
+
+function resolveChatMediaUrl(value: unknown): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (
+    /^https?:\/\//i.test(raw) ||
+    raw.startsWith("data:") ||
+    raw.startsWith("file:") ||
+    raw.startsWith("blob:")
+  ) {
+    return raw;
+  }
+  const base = String(process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL).replace(
+    /\/+$/,
+    "",
+  );
+  if (raw.startsWith("/")) return `${base}${raw}`;
+  return `${base}/${raw.replace(/^\/+/, "")}`;
+}
+
+function getExtensionFromMimeType(mimeType?: string | null): string {
+  const value = String(mimeType || "").toLowerCase();
+  if (value.includes("png")) return "png";
+  if (value.includes("webp")) return "webp";
+  if (value.includes("gif")) return "gif";
+  if (value.includes("heic") || value.includes("heif")) return "heic";
+  if (value.includes("jpeg") || value.includes("jpg")) return "jpg";
+  if (value.includes("pdf")) return "pdf";
+  if (value.includes("json")) return "json";
+  if (value.includes("zip")) return "zip";
+  if (value.includes("csv")) return "csv";
+  if (value.includes("mp4")) return "mp4";
+  return "bin";
+}
+
+async function ensureBase64Data(
+  input: {
+    base64?: string | null;
+    uri?: string | null;
+  },
+) {
+  const direct = String(input.base64 || "").trim();
+  if (direct) return direct;
+
+  const uri = String(input.uri || "").trim();
+  if (!uri) return "";
+
+  const response = await fetch(uri);
+  if (!response.ok) return "";
+  const arr = await response.arrayBuffer();
+  return Buffer.from(arr).toString("base64");
+}
 
 export function MessagesScreen({
   user,
@@ -166,7 +221,7 @@ export function MessagesScreen({
         senderName: String(payload?.senderName || "Nguoi dung"),
         content: String(payload?.content ?? payload?.text ?? ""),
         type: payload?.type ? String(payload.type) : "text",
-        mediaUrl: payload?.mediaUrl ? String(payload.mediaUrl) : "",
+        mediaUrl: resolveChatMediaUrl(payload?.mediaUrl),
         fileName: payload?.fileName ? String(payload.fileName) : "",
         fileSize: Number(payload?.fileSize || 0),
         meta: payload?.meta || null,
@@ -222,7 +277,7 @@ export function MessagesScreen({
                 ...item,
                 content: String(payload?.content ?? "Tin nhan da duoc thu hoi"),
                 type: payload?.type ? String(payload.type) : item.type,
-                mediaUrl: payload?.mediaUrl ? String(payload.mediaUrl) : "",
+                mediaUrl: resolveChatMediaUrl(payload?.mediaUrl),
                 fileName: payload?.fileName ? String(payload.fileName) : "",
                 fileSize: Number(payload?.fileSize || 0),
                 meta: payload?.meta || null,
@@ -329,22 +384,27 @@ export function MessagesScreen({
 
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      if (!asset.base64) {
+      const base64 = await ensureBase64Data({
+        base64: (asset as any).base64,
+        uri: asset.uri,
+      });
+      if (!base64) {
         Alert.alert("Khong the gui anh", "Khong doc duoc du lieu anh.");
         return;
       }
 
-      const approxBytes = Math.floor((asset.base64.length * 3) / 4);
+      const approxBytes = Math.floor((base64.length * 3) / 4);
       if (approxBytes > 12 * 1024 * 1024) {
         Alert.alert("Anh qua lon", "Vui long chon anh nho hon 12MB.");
         return;
       }
 
       setIsUploadingAttachment(true);
+      const ext = getExtensionFromMimeType(asset.mimeType);
       const uploaded = await api.uploadChatFileBase64({
-        fileName: asset.fileName || `chat-image-${Date.now()}.jpg`,
+        fileName: asset.fileName || `chat-image-${Date.now()}.${ext}`,
         contentType: asset.mimeType || "image/jpeg",
-        base64Data: asset.base64,
+        base64Data: base64,
       });
 
       if (!uploaded.fileUrl) {
@@ -386,7 +446,10 @@ export function MessagesScreen({
 
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
-      const base64 = String(asset.base64 || "");
+      const base64 = await ensureBase64Data({
+        base64: (asset as any).base64,
+        uri: (asset as any).uri,
+      });
       if (!base64) {
         Alert.alert("Khong the gui tep", "Khong doc duoc du lieu tep.");
         return;
