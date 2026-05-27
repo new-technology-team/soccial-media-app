@@ -1,5 +1,13 @@
 import React, { useMemo } from "react";
-import { Alert, Image, Linking, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Linking,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import type { Message } from "../../types";
 import { formatTime } from "../../utils";
 
@@ -16,8 +24,10 @@ export function MessageBubble({
   onLongPress,
   onOpenPost,
 }: MessageBubbleProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const isSystem = message.type === "system" || Number(message.senderId) === 0;
   const isMe = message.senderId === currentUserId;
+  const imageWidth = Math.min(240, Math.max(160, screenWidth * 0.55));
 
   const sharedPostMeta = useMemo(() => {
     if (message.type !== "share_post") return null;
@@ -45,6 +55,19 @@ export function MessageBubble({
   const textValue = message.isRecalled
     ? "Tin nhan da duoc thu hoi"
     : message.content;
+  const imageRatio = useMemo(() => {
+    if (message.type !== "image") return 1;
+    const width = Number((message.meta as any)?.width || 0);
+    const height = Number((message.meta as any)?.height || 0);
+    if (width > 0 && height > 0) {
+      return Math.min(1.8, Math.max(0.58, width / height));
+    }
+    return 1;
+  }, [message.meta, message.type]);
+  const hidePlaceholderText =
+    !message.isRecalled &&
+    ((message.type === "image" && textValue.trim() === "[Anh]") ||
+      (message.type === "file" && textValue.trim().startsWith("[Tep]")));
 
   const handleOpenFile = async () => {
     const fileUrl = String(message.mediaUrl || "").trim();
@@ -84,8 +107,13 @@ export function MessageBubble({
           {message.type === "image" && message.mediaUrl ? (
             <Image
               source={{ uri: message.mediaUrl }}
-              className="w-full rounded-xl mb-2"
-              style={{ height: 170 }}
+              className="rounded-xl mb-2"
+              style={{
+                width: imageWidth,
+                aspectRatio: imageRatio,
+                maxHeight: 320,
+                minHeight: 120,
+              }}
               resizeMode="cover"
             />
           ) : null}
@@ -150,7 +178,7 @@ export function MessageBubble({
             </TouchableOpacity>
           ) : null}
 
-          {!!textValue ? (
+          {!!textValue && !hidePlaceholderText ? (
             <Text
               className={`text-sm ${
                 message.isRecalled

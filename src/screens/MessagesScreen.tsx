@@ -357,6 +357,10 @@ export function MessagesScreen({
         mediaUrl: uploaded.fileUrl,
         fileName: uploaded.fileName,
         fileSize: uploaded.size,
+        meta: {
+          width: Number(asset.width || 0),
+          height: Number(asset.height || 0),
+        },
       });
       setMessages((prev) => [...prev, res.message]);
       setMessageText("");
