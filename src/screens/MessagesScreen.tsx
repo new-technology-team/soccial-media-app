@@ -124,6 +124,32 @@ function resolveVideoCallUrl(roomId: string): string {
   return `${base}/${encodeURIComponent(roomId)}`;
 }
 
+function resolveDirectPeerUserId(
+  conversation: Conversation | null | undefined,
+  currentUserId: number,
+): number | null {
+  if (!conversation || conversation.isGroup) return null;
+
+  const directPeerId = Number(conversation.directPeerId || 0);
+  if (directPeerId > 0) return directPeerId;
+
+  const fromMembers = (conversation.members || []).find(
+    (member) =>
+      Number(member?.userId || 0) > 0 &&
+      Number(member?.userId || 0) !== Number(currentUserId),
+  );
+  if (fromMembers?.userId) return Number(fromMembers.userId);
+
+  const fromParticipants = (conversation.participants || []).find(
+    (participant) =>
+      Number(participant?.userId || 0) > 0 &&
+      Number(participant?.userId || 0) !== Number(currentUserId),
+  );
+  if (fromParticipants?.userId) return Number(fromParticipants.userId);
+
+  return null;
+}
+
 export function MessagesScreen({
   user,
   mode = "all",
@@ -155,6 +181,7 @@ export function MessagesScreen({
   const messageListRef = useRef<FlatList<Message> | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
+  const activeJoinedConversationIdsRef = useRef<string[]>([]);
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
   const conversationsRef = useRef<Conversation[]>([]);
   const handledMessageEventRef = useRef<Set<string>>(new Set());
@@ -344,10 +371,12 @@ export function MessagesScreen({
     socketRef.current = socket;
 
     const onSocketConnect = () => {
-      const activeConversationId = activeConversationIdRef.current;
-      if (activeConversationId) {
-        socket.emit("join-conversation", activeConversationId);
-      }
+      const roomIds = activeJoinedConversationIdsRef.current;
+      roomIds.forEach((roomId) => {
+        if (roomId) {
+          socket.emit("join-conversation", roomId);
+        }
+      });
     };
 
     const onMessageNew = (payload: any) => {
@@ -370,7 +399,12 @@ export function MessagesScreen({
       const eventKey = `new:${normalized.conversationId}:${normalized.id}`;
       if (!markMessageEventHandled(eventKey)) return;
 
-      if (activeConversationIdRef.current === normalized.conversationId) {
+      const activeJoinedConversationIds = activeJoinedConversationIdsRef.current;
+      const isInActiveJoinedRoom = activeJoinedConversationIds.includes(
+        normalized.conversationId,
+      );
+
+      if (isInActiveJoinedRoom) {
         setMessages((prev) => {
           if (prev.some((item) => item.id === normalized.id)) return prev;
           return [...prev, normalized];
@@ -386,7 +420,7 @@ export function MessagesScreen({
         }
 
         const nextUnread =
-          activeConversationIdRef.current === normalized.conversationId
+          isInActiveJoinedRoom
             ? 0
             : (target.unreadCount || 0) + 1;
 
@@ -545,18 +579,49 @@ export function MessagesScreen({
     const socket = socketRef.current;
     if (!socket) return;
 
-    const previousId = activeConversationIdRef.current;
+    const previousRoomIds = activeJoinedConversationIdsRef.current;
     const nextId = selectedConv?.id || null;
+    const nextRoomIds: string[] = [];
 
-    if (previousId && previousId !== nextId) {
-      socket.emit("leave-conversation", previousId);
-    }
-    if (nextId && previousId !== nextId) {
-      socket.emit("join-conversation", nextId);
+    if (nextId) {
+      nextRoomIds.push(nextId);
+
+      const activeConversation =
+        selectedConv ||
+        conversationsRef.current.find((item) => String(item.id) === String(nextId));
+      const activePeerId = resolveDirectPeerUserId(activeConversation, user.id);
+
+      if (activePeerId) {
+        for (const conversation of conversationsRef.current) {
+          const conversationId = String(conversation?.id || "").trim();
+          if (!conversationId || conversation.isGroup) continue;
+          const peerId = resolveDirectPeerUserId(conversation, user.id);
+          if (peerId && Number(peerId) === Number(activePeerId)) {
+            nextRoomIds.push(conversationId);
+          }
+        }
+      }
     }
 
+    const uniqueNextRoomIds = Array.from(
+      new Set(nextRoomIds.map((id) => String(id || "").trim()).filter(Boolean)),
+    );
+
+    previousRoomIds
+      .filter((roomId) => !uniqueNextRoomIds.includes(roomId))
+      .forEach((roomId) => {
+        socket.emit("leave-conversation", roomId);
+      });
+
+    uniqueNextRoomIds
+      .filter((roomId) => !previousRoomIds.includes(roomId))
+      .forEach((roomId) => {
+        socket.emit("join-conversation", roomId);
+      });
+
+    activeJoinedConversationIdsRef.current = uniqueNextRoomIds;
     activeConversationIdRef.current = nextId;
-  }, [selectedConv?.id]);
+  }, [selectedConv, user.id]);
 
   useEffect(() => {
     if (!selectedConv?.id) {
@@ -832,14 +897,7 @@ export function MessagesScreen({
 
   const activeConversation = conversationDetail || selectedConv;
   const peerUserId = useMemo(() => {
-    if (!activeConversation || activeConversation.isGroup) return null;
-    if (typeof activeConversation.directPeerId === "number") {
-      return activeConversation.directPeerId;
-    }
-    const directPeer = (activeConversation.participants || []).find(
-      (item) => Number(item.userId) !== Number(user.id),
-    );
-    return directPeer ? Number(directPeer.userId) : null;
+    return resolveDirectPeerUserId(activeConversation, user.id);
   }, [activeConversation, user.id]);
 
   const conversationNotificationsEnabled = Boolean(
@@ -859,15 +917,27 @@ export function MessagesScreen({
   );
   const callTargetUserId = useMemo(() => {
     if (typeof peerUserId === "number" && peerUserId > 0) return peerUserId;
-    const participants = activeConversation?.participants || [];
-    if (participants.length === 2) {
-      const other = participants.find(
-        (item) => Number(item.userId) !== Number(user.id),
-      );
-      if (other?.userId) return Number(other.userId);
-    }
+    const fromMembers = (activeConversation?.members || []).find(
+      (member) =>
+        Number(member?.userId || 0) > 0 &&
+        Number(member?.userId || 0) !== Number(user.id),
+    );
+    if (fromMembers?.userId) return Number(fromMembers.userId);
+
+    const fromParticipants = (activeConversation?.participants || []).find(
+      (participant) =>
+        Number(participant?.userId || 0) > 0 &&
+        Number(participant?.userId || 0) !== Number(user.id),
+    );
+    if (fromParticipants?.userId) return Number(fromParticipants.userId);
+
     return null;
-  }, [activeConversation?.participants, peerUserId, user.id]);
+  }, [
+    activeConversation?.members,
+    activeConversation?.participants,
+    peerUserId,
+    user.id,
+  ]);
   const isGroupCallConversation = Boolean(
     activeConversation?.isGroup && !callTargetUserId,
   );
