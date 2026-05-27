@@ -20,14 +20,18 @@ export function MessageBubble({
     : message.content;
 
   return (
-    <View className={`flex-row justify-${isMe ? "end" : "start"} px-4 py-1`}>
+    <View
+      className="flex-row px-4 py-1"
+      style={{ justifyContent: isMe ? "flex-end" : "flex-start" }}
+    >
       <TouchableOpacity
         activeOpacity={0.8}
         onLongPress={() => onLongPress?.(message)}
         delayLongPress={280}
+        style={{ maxWidth: "76%", minWidth: 72 }}
       >
         <View
-          className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+          className={`rounded-2xl px-4 py-3 ${
             isMe ? "bg-primary rounded-br-sm" : "bg-surface border border-border rounded-bl-sm"
           }`}
         >
@@ -46,6 +50,7 @@ export function MessageBubble({
                   ? "text-white"
                   : "text-foreground"
             }`}
+            style={{ flexShrink: 1, lineHeight: 20 }}
           >
             {textValue}
           </Text>

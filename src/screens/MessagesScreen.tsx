@@ -357,6 +357,15 @@ export function MessagesScreen({
   const conversationNotificationsEnabled = Boolean(
     activeConversation?.viewerSettings?.notificationsEnabled ?? true,
   );
+  const myMemberRole = useMemo(() => {
+    if (!activeConversation?.isGroup) return null;
+    const me = (activeConversation.members || []).find(
+      (member) => Number(member.userId) === Number(user.id),
+    );
+    return String(me?.role || "").toLowerCase() || null;
+  }, [activeConversation, user.id]);
+  const canDissolveGroup = activeConversation?.isGroup && myMemberRole === "leader";
+  const canLeaveGroup = Boolean(activeConversation?.isGroup) && !canDissolveGroup;
 
   const handleToggleNotifications = useCallback(async () => {
     if (!selectedConv) return;
@@ -409,6 +418,68 @@ export function MessagesScreen({
     peerUserId,
     selectedConv,
   ]);
+
+  const handleLeaveGroup = useCallback(() => {
+    if (!selectedConv) return;
+    Alert.alert("Roi nhom", "Ban chac chan muon roi nhom?", [
+      { text: "Huy", style: "cancel" },
+      {
+        text: "Roi nhom",
+        style: "destructive",
+        onPress: async () => {
+          setIsMutatingConversation(true);
+          try {
+            await api.leaveGroupConversation(selectedConv.id);
+            setShowConversationMenu(false);
+            setSelectedConv(null);
+            setConversationDetail(null);
+            setMessages([]);
+            void loadConversations();
+          } catch (err) {
+            Alert.alert(
+              "Khong the roi nhom",
+              err instanceof Error ? err.message : "Vui long thu lai",
+            );
+          } finally {
+            setIsMutatingConversation(false);
+          }
+        },
+      },
+    ]);
+  }, [loadConversations, selectedConv]);
+
+  const handleDissolveGroup = useCallback(() => {
+    if (!selectedConv) return;
+    Alert.alert(
+      "Giai tan nhom",
+      "Giai tan nhom se xoa cuoc tro chuyen nay cho tat ca thanh vien.",
+      [
+        { text: "Huy", style: "cancel" },
+        {
+          text: "Giai tan",
+          style: "destructive",
+          onPress: async () => {
+            setIsMutatingConversation(true);
+            try {
+              await api.dissolveGroupConversation(selectedConv.id);
+              setShowConversationMenu(false);
+              setSelectedConv(null);
+              setConversationDetail(null);
+              setMessages([]);
+              void loadConversations();
+            } catch (err) {
+              Alert.alert(
+                "Khong the giai tan nhom",
+                err instanceof Error ? err.message : "Vui long thu lai",
+              );
+            } finally {
+              setIsMutatingConversation(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [loadConversations, selectedConv]);
 
   return (
     <View className="flex-1 bg-background">
@@ -664,6 +735,34 @@ export function MessagesScreen({
                   }`}
                 >
                   {activeConversation?.isBlockedByMe ? "Bo chan tin nhan" : "Chan tin nhan"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {canLeaveGroup ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-red-200 bg-red-50 px-4 mb-2 flex-row items-center"
+                onPress={handleLeaveGroup}
+                disabled={isMutatingConversation}
+                activeOpacity={0.8}
+              >
+                <Feather name="log-out" size={16} color="#dc2626" />
+                <Text className="ml-3 text-sm font-medium text-danger">
+                  Roi khoi nhom
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {canDissolveGroup ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-red-200 bg-red-50 px-4 mb-2 flex-row items-center"
+                onPress={handleDissolveGroup}
+                disabled={isMutatingConversation}
+                activeOpacity={0.8}
+              >
+                <Feather name="trash-2" size={16} color="#dc2626" />
+                <Text className="ml-3 text-sm font-medium text-danger">
+                  Giai tan nhom
                 </Text>
               </TouchableOpacity>
             ) : null}

@@ -32,10 +32,67 @@ const REQUEST_TIMEOUT_MS = Number(
   process.env.EXPO_PUBLIC_API_TIMEOUT_MS || 20000,
 );
 
+let refreshTokenInFlight: Promise<string | null> | null = null;
+
 type HttpResult = {
   status: number;
   responseText: string;
 };
+
+function parseJsonSafe(raw: string): any {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshTokenInFlight) return refreshTokenInFlight;
+
+  refreshTokenInFlight = (async () => {
+    const current = authStore.getTokens();
+    const refreshToken = current?.refreshToken;
+    if (!refreshToken) return null;
+
+    try {
+      const result = await performHttpRequest(
+        `${API_URL}/api/auth/refresh`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken }),
+        },
+        REQUEST_TIMEOUT_MS,
+      );
+
+      if (result.status < 200 || result.status >= 300) {
+        return null;
+      }
+
+      const data = parseJsonSafe(result.responseText);
+      const nextAccessToken = String(data?.access_token || "").trim();
+      const nextRefreshToken = String(data?.refresh_token || refreshToken).trim();
+
+      if (!nextAccessToken) return null;
+
+      await authStore.setTokens({
+        accessToken: nextAccessToken,
+        refreshToken: nextRefreshToken,
+      });
+      return nextAccessToken;
+    } catch {
+      return null;
+    } finally {
+      refreshTokenInFlight = null;
+    }
+  })();
+
+  return refreshTokenInFlight;
+}
 
 function performHttpRequest(
   url: string,
@@ -98,6 +155,7 @@ function normalizeNetworkError(error: Error): string {
 async function requestWithXhr<T>(
   path: string,
   options: RequestInit = {},
+  allowRetry = true,
 ): Promise<T> {
   const headers = new Headers(options.headers || {});
   const tokens = authStore.getTokens();
@@ -131,13 +189,36 @@ async function requestWithXhr<T>(
     );
   }
 
-  let data: any = {};
-  if (result.responseText) {
-    try {
-      data = JSON.parse(result.responseText);
-    } catch {
-      data = {};
+  const data = parseJsonSafe(result.responseText);
+
+  if (
+    result.status === 401 &&
+    allowRetry &&
+    !path.startsWith("/api/auth/login") &&
+    !path.startsWith("/api/auth/register") &&
+    !path.startsWith("/api/auth/refresh")
+  ) {
+    const nextAccessToken = await refreshAccessToken();
+    if (nextAccessToken) {
+      const retryHeaders = new Headers(options.headers || {});
+      if (!retryHeaders.has("Content-Type")) {
+        retryHeaders.set("Content-Type", "application/json");
+      }
+      retryHeaders.set("Authorization", `Bearer ${nextAccessToken}`);
+
+      return requestWithXhr<T>(
+        path,
+        {
+          ...options,
+          headers: retryHeaders,
+        },
+        false,
+      );
     }
+  }
+
+  if (result.status === 401) {
+    await authStore.clear();
   }
 
   if (result.status < 200 || result.status >= 300) {
@@ -153,7 +234,7 @@ async function requestWithXhr<T>(
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return requestWithXhr<T>(path, options);
+  return requestWithXhr<T>(path, options, true);
 
   /*
   const headers = new Headers(options.headers || {});
@@ -617,6 +698,22 @@ export const api = {
       {
         method: "PATCH",
         body: JSON.stringify({ enabled }),
+      },
+    ),
+
+  leaveGroupConversation: (conversationId: string | number) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/leave`,
+      {
+        method: "DELETE",
+      },
+    ),
+
+  dissolveGroupConversation: (conversationId: string | number) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}`,
+      {
+        method: "DELETE",
       },
     ),
 
