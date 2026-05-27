@@ -1,6 +1,7 @@
 export type Conversation = {
   id: string;
   name: string | null;
+  avatarUrl?: string | null;
   isGroup: boolean;
   type?: "group" | "direct" | string;
   lastMessage?: string;
@@ -28,6 +29,11 @@ export type Message = {
   senderId: number;
   senderName: string;
   content: string;
+  type?: string;
+  mediaUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  meta?: Record<string, any> | null;
   createdAt: string;
   isRecalled?: boolean;
   isRemovedForMe?: boolean;

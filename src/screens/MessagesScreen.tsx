@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { Feather } from "@expo/vector-icons";
 import { ConversationItem } from "../components/chat/ConversationItem";
 import { MessageBubble } from "../components/chat/MessageBubble";
@@ -29,6 +31,7 @@ export function MessagesScreen({
   initialDirectRouteKey,
   onInitialDirectHandled,
   onOpenUserProfile,
+  onOpenPost,
 }: MessagesScreenProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +46,7 @@ export function MessagesScreen({
   const [isLoadingConversationDetail, setIsLoadingConversationDetail] =
     useState(false);
   const [isMutatingConversation, setIsMutatingConversation] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
@@ -161,6 +165,11 @@ export function MessagesScreen({
         senderId: Number(payload?.senderId || 0),
         senderName: String(payload?.senderName || "Nguoi dung"),
         content: String(payload?.content ?? payload?.text ?? ""),
+        type: payload?.type ? String(payload.type) : "text",
+        mediaUrl: payload?.mediaUrl ? String(payload.mediaUrl) : "",
+        fileName: payload?.fileName ? String(payload.fileName) : "",
+        fileSize: Number(payload?.fileSize || 0),
+        meta: payload?.meta || null,
         createdAt: String(payload?.createdAt || new Date().toISOString()),
         isRecalled: Boolean(payload?.isRecalled),
       };
@@ -212,6 +221,11 @@ export function MessagesScreen({
             ? {
                 ...item,
                 content: String(payload?.content ?? "Tin nhan da duoc thu hoi"),
+                type: payload?.type ? String(payload.type) : item.type,
+                mediaUrl: payload?.mediaUrl ? String(payload.mediaUrl) : "",
+                fileName: payload?.fileName ? String(payload.fileName) : "",
+                fileSize: Number(payload?.fileSize || 0),
+                meta: payload?.meta || null,
                 isRecalled: Boolean(payload?.isRecalled ?? true),
               }
             : item,
@@ -281,9 +295,12 @@ export function MessagesScreen({
   });
 
   const handleSend = useCallback(async () => {
-    if (!messageText.trim() || !selectedConv) return;
+    if (!messageText.trim() || !selectedConv || isUploadingAttachment) return;
     try {
-      const res = await api.sendMessage(selectedConv.id, messageText.trim());
+      const res = await api.sendMessagePayload(selectedConv.id, {
+        type: "text",
+        text: messageText.trim(),
+      });
       setMessages((prev) => [...prev, res.message]);
       setMessageText("");
     } catch (err) {
@@ -291,6 +308,119 @@ export function MessagesScreen({
         "Khong the gui tin nhan",
         err instanceof Error ? err.message : "Vui long thu lai",
       );
+    }
+  }, [isUploadingAttachment, messageText, selectedConv]);
+
+  const handlePickImage = useCallback(async () => {
+    if (!selectedConv) return;
+
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Thieu quyen", "Vui long cap quyen thu vien anh.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert("Khong the gui anh", "Khong doc duoc du lieu anh.");
+        return;
+      }
+
+      const approxBytes = Math.floor((asset.base64.length * 3) / 4);
+      if (approxBytes > 12 * 1024 * 1024) {
+        Alert.alert("Anh qua lon", "Vui long chon anh nho hon 12MB.");
+        return;
+      }
+
+      setIsUploadingAttachment(true);
+      const uploaded = await api.uploadChatFileBase64({
+        fileName: asset.fileName || `chat-image-${Date.now()}.jpg`,
+        contentType: asset.mimeType || "image/jpeg",
+        base64Data: asset.base64,
+      });
+
+      if (!uploaded.fileUrl) {
+        throw new Error("Upload anh that bai");
+      }
+
+      const res = await api.sendMessagePayload(selectedConv.id, {
+        type: "image",
+        text: messageText.trim() || "",
+        mediaUrl: uploaded.fileUrl,
+        fileName: uploaded.fileName,
+        fileSize: uploaded.size,
+      });
+      setMessages((prev) => [...prev, res.message]);
+      setMessageText("");
+    } catch (err) {
+      Alert.alert(
+        "Khong the gui anh",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  }, [messageText, selectedConv]);
+
+  const handlePickFile = useCallback(async () => {
+    if (!selectedConv) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: "*/*",
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      const base64 = String(asset.base64 || "");
+      if (!base64) {
+        Alert.alert("Khong the gui tep", "Khong doc duoc du lieu tep.");
+        return;
+      }
+
+      const approxBytes = Math.floor((base64.length * 3) / 4);
+      if (approxBytes > 15 * 1024 * 1024) {
+        Alert.alert("Tep qua lon", "Vui long chon tep nho hon 15MB.");
+        return;
+      }
+
+      setIsUploadingAttachment(true);
+      const uploaded = await api.uploadChatFileBase64({
+        fileName: asset.name || `chat-file-${Date.now()}`,
+        contentType: asset.mimeType || "application/octet-stream",
+        base64Data: base64,
+      });
+
+      if (!uploaded.fileUrl) {
+        throw new Error("Upload tep that bai");
+      }
+
+      const res = await api.sendMessagePayload(selectedConv.id, {
+        type: "file",
+        text: messageText.trim() || "",
+        mediaUrl: uploaded.fileUrl,
+        fileName: uploaded.fileName || asset.name || "tep-dinh-kem",
+        fileSize: uploaded.size || approxBytes,
+      });
+      setMessages((prev) => [...prev, res.message]);
+      setMessageText("");
+    } catch (err) {
+      Alert.alert(
+        "Khong the gui tep",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsUploadingAttachment(false);
     }
   }, [messageText, selectedConv]);
 
@@ -365,7 +495,7 @@ export function MessagesScreen({
     return String(me?.role || "").toLowerCase() || null;
   }, [activeConversation, user.id]);
   const canDissolveGroup = activeConversation?.isGroup && myMemberRole === "leader";
-  const canLeaveGroup = Boolean(activeConversation?.isGroup) && !canDissolveGroup;
+  const canLeaveGroup = Boolean(activeConversation?.isGroup);
 
   const handleToggleNotifications = useCallback(async () => {
     if (!selectedConv) return;
@@ -418,6 +548,58 @@ export function MessagesScreen({
     peerUserId,
     selectedConv,
   ]);
+
+  const handleUpdateGroupAvatar = useCallback(async () => {
+    if (!selectedConv || !activeConversation?.isGroup) return;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Thieu quyen", "Vui long cap quyen thu vien anh.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.55,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert("Khong the doi avatar", "Khong doc duoc du lieu anh.");
+        return;
+      }
+
+      const approxBytes = Math.floor((asset.base64.length * 3) / 4);
+      if (approxBytes > 8 * 1024 * 1024) {
+        Alert.alert("Anh qua lon", "Vui long chon anh nho hon 8MB.");
+        return;
+      }
+
+      setIsMutatingConversation(true);
+      const uploaded = await api.uploadChatFileBase64({
+        fileName: asset.fileName || `group-avatar-${Date.now()}.jpg`,
+        contentType: asset.mimeType || "image/jpeg",
+        base64Data: asset.base64,
+      });
+      if (!uploaded.fileUrl) {
+        throw new Error("Upload avatar that bai");
+      }
+
+      await api.updateGroupConversationAvatar(selectedConv.id, uploaded.fileUrl);
+      await loadConversationDetail(selectedConv.id);
+      await loadConversations();
+      setShowConversationMenu(false);
+    } catch (err) {
+      Alert.alert(
+        "Khong the doi avatar nhom",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsMutatingConversation(false);
+    }
+  }, [activeConversation?.isGroup, loadConversationDetail, loadConversations, selectedConv]);
 
   const handleLeaveGroup = useCallback(() => {
     if (!selectedConv) return;
@@ -582,6 +764,7 @@ export function MessagesScreen({
                 message={item}
                 currentUserId={user.id}
                 onLongPress={handleLongPressMessage}
+                onOpenPost={onOpenPost}
               />
             )}
             contentContainerStyle={{
@@ -595,11 +778,18 @@ export function MessagesScreen({
               value={messageText}
               onChangeText={setMessageText}
               onSend={handleSend}
+              onPickImage={() => {
+                void handlePickImage();
+              }}
+              onPickFile={() => {
+                void handlePickFile();
+              }}
               disabled={Boolean(
                 !activeConversation?.isGroup &&
                   (activeConversation?.isBlockedByMe ||
                     activeConversation?.isBlockedMe),
               )}
+              disableAttachments={isUploadingAttachment}
               placeholder={
                 !activeConversation?.isGroup &&
                 activeConversation?.isBlockedByMe
@@ -607,7 +797,9 @@ export function MessagesScreen({
                   : !activeConversation?.isGroup &&
                       activeConversation?.isBlockedMe
                     ? "Ban da bi chan tin nhan"
-                    : "Nhan tin..."
+                    : isUploadingAttachment
+                      ? "Dang tai tep..."
+                      : "Nhan tin..."
               }
             />
           </View>
@@ -685,6 +877,22 @@ export function MessagesScreen({
                 <Feather name="users" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
                   Xem thanh vien
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {activeConversation?.isGroup ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+                onPress={() => {
+                  void handleUpdateGroupAvatar();
+                }}
+                disabled={isMutatingConversation}
+                activeOpacity={0.8}
+              >
+                <Feather name="image" size={16} color="#111827" />
+                <Text className="ml-3 text-sm font-medium text-foreground">
+                  Doi avatar nhom
                 </Text>
               </TouchableOpacity>
             ) : null}

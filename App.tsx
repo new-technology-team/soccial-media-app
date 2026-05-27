@@ -179,6 +179,7 @@ export default function App() {
             initialDirectRouteKey={messageTarget?.routeKey}
             onInitialDirectHandled={handleMessageRouteConsumed}
             onOpenUserProfile={openUserProfile}
+            onOpenPost={openPostInFeed}
           />
         );
       case "friends":

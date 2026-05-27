@@ -233,14 +233,13 @@ export function FeedScreen({
     setIsSharing(true);
     try {
       const direct = await api.createDirectConversation(friendId);
-      const note = shareNote.trim();
-      const lines = [
-        `Ban ${user.fullName} vua chia se mot bai viet`,
-        note || "",
-        sharePost.content || "",
-        sharePost.mediaUrl ? `Media: ${sharePost.mediaUrl}` : "",
-      ].filter(Boolean);
-      await api.sendMessage(direct.conversation.id, lines.join("\n"));
+      await api.sendSharedPostMessage(direct.conversation.id, {
+        text: shareNote.trim(),
+        postId: sharePost.id,
+        postAuthor: sharePost.authorName,
+        postContent: sharePost.content,
+        postMediaUrl: sharePost.mediaUrl || "",
+      });
       closeShareModal();
       Alert.alert("Da chia se", "Da gui bai viet cho ban be.");
     } catch (err) {

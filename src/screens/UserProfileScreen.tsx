@@ -27,7 +27,7 @@ interface UserProfileScreenProps {
   userId: number;
   onBack: () => void;
   onMessageUser?: (userId: number) => void;
-  onOpenPost?: (postId: string) => void;
+  onOpenPost?: (postId: string, options?: { openComments?: boolean }) => void;
 }
 
 export function UserProfileScreen({
@@ -311,7 +311,7 @@ export function UserProfileScreen({
         renderItem={({ item }) => (
           <TouchableOpacity
             className="mx-4 mb-3 rounded-2xl bg-surface border border-border px-4 py-3"
-            onPress={() => onOpenPost?.(item.id)}
+            onPress={() => onOpenPost?.(item.id, { openComments: true })}
             activeOpacity={0.8}
           >
             <Text className="text-xs text-primary font-semibold mb-1">

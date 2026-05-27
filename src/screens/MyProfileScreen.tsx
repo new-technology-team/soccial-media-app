@@ -11,7 +11,7 @@ import type { AuthUser, FeedPost } from "../types";
 interface MyProfileScreenProps {
   user: AuthUser;
   onOpenSettings: () => void;
-  onOpenPost?: (postId: string) => void;
+  onOpenPost?: (postId: string, options?: { openComments?: boolean }) => void;
 }
 
 type ProfileTab = "posts" | "shares";
@@ -146,7 +146,7 @@ export function MyProfileScreen({
           <TouchableOpacity
             className="mb-3 rounded-2xl bg-surface border border-border px-4 py-3"
             activeOpacity={0.8}
-            onPress={() => onOpenPost?.(item.id)}
+            onPress={() => onOpenPost?.(item.id, { openComments: true })}
           >
             <Text className="text-xs text-primary font-semibold mb-1">
               {new Date(item.createdAt).toLocaleDateString()} •{" "}

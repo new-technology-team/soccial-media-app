@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { Avatar } from '../common/Avatar';
 import type { Conversation } from '../../types';
 import { formatTime } from '../../utils';
@@ -16,7 +16,11 @@ export function ConversationItem({ conversation, onPress }: ConversationItemProp
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Avatar name={conversation.name || 'G'} size="md" />
+      <Avatar
+        name={conversation.name || 'G'}
+        avatarUrl={conversation.avatarUrl}
+        size="md"
+      />
       <View className="flex-1 ml-3">
         <View className="flex-row justify-between">
           <Text className="text-foreground font-semibold text-sm">

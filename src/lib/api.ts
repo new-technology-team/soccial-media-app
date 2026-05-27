@@ -400,6 +400,7 @@ function mapConversation(raw: any): Conversation {
   return {
     id: toStringId(raw?.id ?? raw?._id),
     name: raw?.name || null,
+    avatarUrl: resolveAssetUrl(raw?.avatarUrl) || null,
     type: raw?.type || (raw?.isGroup ? "group" : "direct"),
     isGroup:
       String(raw?.type || "").toLowerCase() === "group" ||
@@ -431,6 +432,11 @@ function mapMessage(raw: any): Message {
     senderId: Number(raw?.senderId || 0),
     senderName: String(raw?.senderName || raw?.senderFullName || "Người dùng"),
     content: String(raw?.content ?? raw?.text ?? ""),
+    type: raw?.type ? String(raw.type) : "text",
+    mediaUrl: resolveAssetUrl(raw?.mediaUrl) || "",
+    fileName: raw?.fileName ? String(raw.fileName) : "",
+    fileSize: Number(raw?.fileSize || 0),
+    meta: raw?.meta || null,
     createdAt: String(raw?.createdAt || new Date().toISOString()),
     isRecalled: Boolean(raw?.isRecalled),
     isRemovedForMe: Boolean(raw?.isRemovedForMe),
@@ -701,6 +707,21 @@ export const api = {
       },
     ),
 
+  updateGroupConversationAvatar: (
+    conversationId: string | number,
+    avatarUrl: string,
+  ) =>
+    request<{ message: string; conversation: any }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/avatar`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ avatarUrl }),
+      },
+    ).then((res) => ({
+      message: String((res as any)?.message || "Da cap nhat avatar nhom"),
+      conversation: mapConversation((res as any)?.conversation || {}),
+    })),
+
   leaveGroupConversation: (conversationId: string | number) =>
     request<{ message: string }>(
       `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/leave`,
@@ -731,6 +752,52 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify({ type: "text", text: content }),
+      },
+    ).then((res) => ({ message: mapMessage(res.message) })),
+
+  sendMessagePayload: (
+    conversationId: string | number,
+    payload: {
+      type?: string;
+      text?: string;
+      mediaUrl?: string;
+      fileName?: string;
+      fileSize?: number;
+      meta?: Record<string, any> | null;
+    },
+  ) =>
+    request<{ message: any }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ).then((res) => ({ message: mapMessage(res.message) })),
+
+  sendSharedPostMessage: (
+    conversationId: string | number,
+    payload: {
+      text?: string;
+      postId: string;
+      postAuthor?: string;
+      postContent?: string;
+      postMediaUrl?: string;
+    },
+  ) =>
+    request<{ message: any }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          type: "share_post",
+          text: payload.text || "",
+          meta: {
+            postId: payload.postId,
+            postAuthor: payload.postAuthor || "",
+            postContent: payload.postContent || "",
+            postMediaUrl: payload.postMediaUrl || "",
+          },
+        }),
       },
     ).then((res) => ({ message: mapMessage(res.message) })),
 
@@ -900,5 +967,23 @@ export const api = {
       },
     ).then((res) => ({
       fileUrl: resolveAssetUrl(res.fileUrl || res.mediaUrl) || "",
+    })),
+
+  uploadChatFileBase64: (payload: {
+    fileName: string;
+    contentType: string;
+    base64Data: string;
+  }) =>
+    request<{ fileUrl: string; fileName?: string; contentType?: string; size?: number }>(
+      "/api/chat/uploads/base64",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ).then((res) => ({
+      fileUrl: resolveAssetUrl(res.fileUrl) || "",
+      fileName: String(res.fileName || payload.fileName || ""),
+      contentType: String(res.contentType || payload.contentType || ""),
+      size: Number(res.size || 0),
     })),
 };

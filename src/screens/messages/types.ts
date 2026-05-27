@@ -15,4 +15,5 @@ export interface MessagesScreenProps {
   initialDirectRouteKey?: number;
   onInitialDirectHandled?: () => void;
   onOpenUserProfile?: (userId: number) => void;
+  onOpenPost?: (postId: string) => void;
 }
