@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Linking,
   Modal,
   RefreshControl,
   Text,
@@ -26,6 +27,28 @@ import { useConversationCompose } from "./messages/hooks";
 import type { MessagesScreenProps } from "./messages/types";
 
 const DEFAULT_API_URL = "http://10.0.2.2:5000";
+const DEFAULT_VIDEO_CALL_BASE_URL = "https://meet.jit.si";
+
+type CallPayload = {
+  conversationId: string;
+  roomId: string;
+  fromUserId: number;
+  fromUserName: string;
+  targetUserId?: number;
+  mode?: "video";
+  answeredAt?: number;
+  reason?: string;
+};
+
+type IncomingCallState = {
+  payload: CallPayload;
+  conversationName: string;
+};
+
+type OutgoingCallState = {
+  payload: CallPayload;
+  conversationName: string;
+};
 
 function resolveChatMediaUrl(value: unknown): string {
   const raw = String(value || "").trim();
@@ -79,6 +102,26 @@ async function ensureBase64Data(
   return Buffer.from(arr).toString("base64");
 }
 
+function sanitizeRoomName(input: string): string {
+  const value = String(input || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return value || `zchat-${Date.now()}`;
+}
+
+function buildCallRoomId(conversationId: string, userId: number): string {
+  return sanitizeRoomName(`zchat-${conversationId}-${userId}-${Date.now()}`);
+}
+
+function resolveVideoCallUrl(roomId: string): string {
+  const base = String(
+    process.env.EXPO_PUBLIC_VIDEO_CALL_BASE_URL || DEFAULT_VIDEO_CALL_BASE_URL,
+  ).replace(/\/+$/, "");
+  return `${base}/${encodeURIComponent(roomId)}`;
+}
+
 export function MessagesScreen({
   user,
   mode = "all",
@@ -102,9 +145,13 @@ export function MessagesScreen({
     useState(false);
   const [isMutatingConversation, setIsMutatingConversation] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
+  const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
+  const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
+  const conversationsRef = useRef<Conversation[]>([]);
 
   const filteredConversations = useMemo(() => {
     const q = conversationKeyword.trim().toLowerCase();
@@ -128,6 +175,10 @@ export function MessagesScreen({
     if (mode !== "groups") return filteredConversations;
     return filteredConversations.filter((item) => item.isGroup);
   }, [filteredConversations, mode]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -203,6 +254,20 @@ export function MessagesScreen({
       setConversationDetail(null);
     } finally {
       setIsLoadingConversationDetail(false);
+    }
+  }, []);
+
+  const openVideoCallRoom = useCallback(async (roomId: string) => {
+    const url = resolveVideoCallUrl(roomId);
+    setIsOpeningCallRoom(true);
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        throw new Error("Thiet bi khong mo duoc lien ket cuoc goi video.");
+      }
+      await Linking.openURL(url);
+    } finally {
+      setIsOpeningCallRoom(false);
     }
   }, []);
 
@@ -288,13 +353,106 @@ export function MessagesScreen({
       );
     };
 
+    const onCallOffer = (raw: any) => {
+      const payload: CallPayload = {
+        conversationId: String(raw?.conversationId || "").trim(),
+        roomId: String(raw?.roomId || "").trim(),
+        fromUserId: Number(raw?.fromUserId || 0),
+        fromUserName: String(raw?.fromUserName || "Nguoi dung"),
+        targetUserId: Number(raw?.targetUserId || 0) || undefined,
+        mode: "video",
+      };
+
+      if (!payload.conversationId || !payload.roomId) return;
+      if (payload.fromUserId === Number(user.id)) return;
+
+      const matchedConversation = conversationsRef.current.find(
+        (item) => String(item.id) === payload.conversationId,
+      );
+      const conversationName = String(
+        matchedConversation?.name || payload.fromUserName || "Cuoc goi video",
+      );
+
+      setIncomingCall({ payload, conversationName });
+
+      if (
+        matchedConversation &&
+        activeConversationIdRef.current !== payload.conversationId
+      ) {
+        void openConversation(matchedConversation);
+      }
+    };
+
+    const onCallAnswer = (raw: any) => {
+      const payload: CallPayload = {
+        conversationId: String(raw?.conversationId || "").trim(),
+        roomId: String(raw?.roomId || "").trim(),
+        fromUserId: Number(raw?.fromUserId || 0),
+        fromUserName: String(raw?.fromUserName || "Nguoi dung"),
+        answeredAt: Number(raw?.answeredAt || 0) || Date.now(),
+      };
+      if (!payload.conversationId || !payload.roomId) return;
+
+      let shouldOpen = false;
+      setOutgoingCall((prev) => {
+        if (!prev) return prev;
+        if (prev.payload.roomId !== payload.roomId) return prev;
+        shouldOpen = true;
+        return null;
+      });
+
+      if (shouldOpen) {
+        void openVideoCallRoom(payload.roomId).catch((err) => {
+          Alert.alert(
+            "Khong the mo cuoc goi video",
+            err instanceof Error ? err.message : "Vui long thu lai",
+          );
+        });
+      }
+    };
+
+    const onCallEnd = (raw: any) => {
+      const payload: CallPayload = {
+        conversationId: String(raw?.conversationId || "").trim(),
+        roomId: String(raw?.roomId || "").trim(),
+        fromUserId: Number(raw?.fromUserId || 0),
+        fromUserName: String(raw?.fromUserName || "Nguoi dung"),
+        reason: String(raw?.reason || "").trim().toLowerCase(),
+      };
+      if (!payload.conversationId || !payload.roomId) return;
+
+      let outgoingStopped = false;
+      setOutgoingCall((prev) => {
+        if (!prev) return prev;
+        if (prev.payload.roomId !== payload.roomId) return prev;
+        outgoingStopped = true;
+        return null;
+      });
+
+      setIncomingCall((prev) => {
+        if (!prev) return prev;
+        if (prev.payload.roomId !== payload.roomId) return prev;
+        return null;
+      });
+
+      if (outgoingStopped && payload.reason === "rejected") {
+        Alert.alert("Cuoc goi bi tu choi", "Nguoi nhan da tu choi cuoc goi.");
+      }
+    };
+
     socket.on("message:new", onMessageNew);
     socket.on("message:updated", onMessageUpdated);
+    socket.on("call:offer", onCallOffer);
+    socket.on("call:answer", onCallAnswer);
+    socket.on("call:end", onCallEnd);
     return () => {
       socket.off("message:new", onMessageNew);
       socket.off("message:updated", onMessageUpdated);
+      socket.off("call:offer", onCallOffer);
+      socket.off("call:answer", onCallAnswer);
+      socket.off("call:end", onCallEnd);
     };
-  }, [loadConversations, user.id]);
+  }, [loadConversations, openConversation, openVideoCallRoom, user.id]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -563,6 +721,150 @@ export function MessagesScreen({
   }, [activeConversation, user.id]);
   const canDissolveGroup = activeConversation?.isGroup && myMemberRole === "leader";
   const canLeaveGroup = Boolean(activeConversation?.isGroup);
+  const conversationTitle = String(
+    activeConversation?.name || selectedConv?.name || "Cuoc tro chuyen",
+  );
+  const directConversationBlocked = Boolean(
+    !activeConversation?.isGroup &&
+      (activeConversation?.isBlockedByMe || activeConversation?.isBlockedMe),
+  );
+  const canStartVideoCall = Boolean(
+    selectedConv &&
+      !directConversationBlocked &&
+      !isOpeningCallRoom &&
+      !outgoingCall &&
+      !incomingCall,
+  );
+
+  const emitCallEnd = useCallback(
+    (
+      payload: Pick<CallPayload, "conversationId" | "roomId" | "targetUserId"> & {
+        reason: string;
+      },
+    ) => {
+      const socket = socketRef.current;
+      if (!socket) return;
+      socket.emit("call:end", {
+        conversationId: payload.conversationId,
+        roomId: payload.roomId,
+        targetUserId: payload.targetUserId,
+        fromUserId: user.id,
+        fromUserName: user.fullName || "Nguoi dung",
+        reason: payload.reason,
+      });
+    },
+    [user.fullName, user.id],
+  );
+
+  const handleStartVideoCall = useCallback(async () => {
+    if (!selectedConv || !canStartVideoCall) return;
+    const socket = socketRef.current;
+    if (!socket) {
+      Alert.alert("Chua ket noi socket", "Vui long thu lai sau it giay.");
+      return;
+    }
+
+    const roomId = buildCallRoomId(String(selectedConv.id), Number(user.id));
+    const payload: CallPayload = {
+      conversationId: String(selectedConv.id),
+      roomId,
+      fromUserId: Number(user.id),
+      fromUserName: user.fullName || "Nguoi dung",
+      mode: "video",
+      targetUserId: selectedConv.isGroup ? undefined : peerUserId || undefined,
+    };
+
+    socket.emit("call:offer", payload);
+
+    if (selectedConv.isGroup) {
+      try {
+        await openVideoCallRoom(roomId);
+      } catch (err) {
+        Alert.alert(
+          "Khong the mo cuoc goi video",
+          err instanceof Error ? err.message : "Vui long thu lai",
+        );
+        emitCallEnd({
+          conversationId: payload.conversationId,
+          roomId: payload.roomId,
+          targetUserId: payload.targetUserId,
+          reason: "error",
+        });
+      }
+      return;
+    }
+
+    setOutgoingCall({
+      payload,
+      conversationName: conversationTitle,
+    });
+  }, [
+    canStartVideoCall,
+    conversationTitle,
+    emitCallEnd,
+    openVideoCallRoom,
+    peerUserId,
+    selectedConv,
+    user.fullName,
+    user.id,
+  ]);
+
+  const handleAcceptIncomingCall = useCallback(async () => {
+    if (!incomingCall) return;
+    const socket = socketRef.current;
+    if (!socket) {
+      Alert.alert("Chua ket noi socket", "Vui long thu lai sau it giay.");
+      return;
+    }
+
+    const payload = incomingCall.payload;
+    socket.emit("call:answer", {
+      conversationId: payload.conversationId,
+      roomId: payload.roomId,
+      targetUserId: payload.fromUserId || undefined,
+      fromUserId: user.id,
+      fromUserName: user.fullName || "Nguoi dung",
+      answeredAt: Date.now(),
+    });
+    setIncomingCall(null);
+
+    try {
+      await openVideoCallRoom(payload.roomId);
+    } catch (err) {
+      Alert.alert(
+        "Khong the mo cuoc goi video",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+      emitCallEnd({
+        conversationId: payload.conversationId,
+        roomId: payload.roomId,
+        targetUserId: payload.fromUserId || undefined,
+        reason: "error",
+      });
+    }
+  }, [emitCallEnd, incomingCall, openVideoCallRoom, user.fullName, user.id]);
+
+  const handleDeclineIncomingCall = useCallback(() => {
+    if (!incomingCall) return;
+    emitCallEnd({
+      conversationId: incomingCall.payload.conversationId,
+      roomId: incomingCall.payload.roomId,
+      targetUserId: incomingCall.payload.fromUserId || undefined,
+      reason: "rejected",
+    });
+    setIncomingCall(null);
+  }, [emitCallEnd, incomingCall]);
+
+  const handleCancelOutgoingCall = useCallback(() => {
+    if (!outgoingCall) return;
+    emitCallEnd({
+      conversationId: outgoingCall.payload.conversationId,
+      roomId: outgoingCall.payload.roomId,
+      targetUserId: outgoingCall.payload.targetUserId,
+      reason: "cancelled",
+    });
+    setOutgoingCall(null);
+  }, [emitCallEnd, outgoingCall]);
 
   const handleToggleNotifications = useCallback(async () => {
     if (!selectedConv) return;
@@ -754,13 +1056,38 @@ export function MessagesScreen({
               <Text className="text-white text-xs font-semibold">+ Nhom</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              className="w-9 h-9 rounded-full bg-surface-secondary border border-border items-center justify-center"
-              onPress={() => setShowConversationMenu(true)}
-              activeOpacity={0.8}
-            >
-              <Feather name="alert-circle" size={16} color="#374151" />
-            </TouchableOpacity>
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${
+                  canStartVideoCall
+                    ? "bg-primary border-primary"
+                    : "bg-surface-secondary border-border"
+                }`}
+                onPress={() => {
+                  void handleStartVideoCall();
+                }}
+                disabled={!canStartVideoCall}
+                activeOpacity={0.8}
+              >
+                {isOpeningCallRoom ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Feather
+                    name="video"
+                    size={16}
+                    color={canStartVideoCall ? "#ffffff" : "#6b7280"}
+                  />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="w-9 h-9 rounded-full bg-surface-secondary border border-border items-center justify-center"
+                onPress={() => setShowConversationMenu(true)}
+                activeOpacity={0.8}
+              >
+                <Feather name="alert-circle" size={16} color="#374151" />
+              </TouchableOpacity>
+            </View>
           )
         }
       />
@@ -872,6 +1199,83 @@ export function MessagesScreen({
           </View>
         </View>
       )}
+
+      <Modal
+        visible={Boolean(outgoingCall)}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelOutgoingCall}
+      >
+        <View className="flex-1 bg-black/45 items-center justify-center px-6">
+          <View className="w-full rounded-2xl bg-surface border border-border p-5">
+            <View className="w-12 h-12 rounded-full bg-primary/15 items-center justify-center self-center mb-3">
+              <Feather name="video" size={22} color="#0052ce" />
+            </View>
+            <Text className="text-base font-bold text-foreground text-center mb-1">
+              Dang goi video...
+            </Text>
+            <Text className="text-sm text-muted-foreground text-center mb-4">
+              {outgoingCall?.conversationName || "Cuoc tro chuyen"}
+            </Text>
+
+            <View className="items-center mb-4">
+              <ActivityIndicator color="#0052ce" />
+            </View>
+
+            <TouchableOpacity
+              className="h-11 rounded-xl border border-red-200 bg-red-50 items-center justify-center"
+              onPress={handleCancelOutgoingCall}
+              activeOpacity={0.85}
+            >
+              <Text className="text-danger font-semibold">Huy cuoc goi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(incomingCall)}
+        transparent
+        animationType="fade"
+        onRequestClose={handleDeclineIncomingCall}
+      >
+        <View className="flex-1 bg-black/45 items-center justify-center px-6">
+          <View className="w-full rounded-2xl bg-surface border border-border p-5">
+            <View className="w-12 h-12 rounded-full bg-primary/15 items-center justify-center self-center mb-3">
+              <Feather name="video" size={22} color="#0052ce" />
+            </View>
+            <Text className="text-base font-bold text-foreground text-center mb-1">
+              Cuoc goi video den
+            </Text>
+            <Text className="text-sm text-muted-foreground text-center mb-5">
+              {incomingCall?.payload.fromUserName || "Nguoi dung"} dang goi cho ban
+            </Text>
+
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                className="flex-1 h-11 rounded-xl border border-red-200 bg-red-50 items-center justify-center mr-2"
+                onPress={handleDeclineIncomingCall}
+                activeOpacity={0.85}
+              >
+                <Text className="text-danger font-semibold">Tu choi</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-1 h-11 rounded-xl bg-primary items-center justify-center ml-2"
+                onPress={() => {
+                  void handleAcceptIncomingCall();
+                }}
+                activeOpacity={0.85}
+              >
+                {isOpeningCallRoom ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text className="text-white font-semibold">Nhan</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ComposeConversationModal
         visible={showComposeModal}
