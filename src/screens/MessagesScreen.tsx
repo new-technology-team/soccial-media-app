@@ -3,8 +3,10 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   RefreshControl,
   Text,
   TouchableOpacity,
@@ -130,6 +132,8 @@ export function MessagesScreen({
   onInitialDirectHandled,
   onOpenUserProfile,
   onOpenPost,
+  incomingCallBootstrap,
+  onIncomingCallBootstrapHandled,
 }: MessagesScreenProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,6 +156,8 @@ export function MessagesScreen({
   const activeConversationIdRef = useRef<string | null>(null);
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
   const conversationsRef = useRef<Conversation[]>([]);
+  const handledMessageEventRef = useRef<Set<string>>(new Set());
+  const handledIncomingBootstrapRef = useRef<number>(0);
 
   const filteredConversations = useMemo(() => {
     const q = conversationKeyword.trim().toLowerCase();
@@ -237,6 +243,42 @@ export function MessagesScreen({
     [loadMessages],
   );
 
+  useEffect(() => {
+    const payload = incomingCallBootstrap;
+    if (!payload?.conversationId || !payload?.roomId) return;
+
+    const routeKey = Number(payload.routeKey || 0);
+    if (routeKey && handledIncomingBootstrapRef.current === routeKey) return;
+    if (routeKey) handledIncomingBootstrapRef.current = routeKey;
+
+    const normalizedPayload: CallPayload = {
+      conversationId: String(payload.conversationId),
+      roomId: String(payload.roomId),
+      fromUserId: Number(payload.fromUserId || 0),
+      fromUserName: String(payload.fromUserName || "Nguoi dung"),
+      targetUserId: Number(payload.targetUserId || 0) || undefined,
+      mode: "video",
+    };
+
+    const matchedConversation = conversationsRef.current.find(
+      (item) => String(item.id) === normalizedPayload.conversationId,
+    );
+    const conversationName = String(
+      matchedConversation?.name ||
+        normalizedPayload.fromUserName ||
+        "Cuoc goi video",
+    );
+
+    setIncomingCall({ payload: normalizedPayload, conversationName });
+    if (
+      matchedConversation &&
+      activeConversationIdRef.current !== normalizedPayload.conversationId
+    ) {
+      void openConversation(matchedConversation);
+    }
+    onIncomingCallBootstrapHandled?.();
+  }, [incomingCallBootstrap, onIncomingCallBootstrapHandled, openConversation]);
+
   const loadConversationDetail = useCallback(async (conversationId: string) => {
     setIsLoadingConversationDetail(true);
     try {
@@ -271,6 +313,20 @@ export function MessagesScreen({
     }
   }, []);
 
+  const markMessageEventHandled = useCallback((eventId: string) => {
+    const key = String(eventId || "").trim();
+    if (!key) return false;
+    if (handledMessageEventRef.current.has(key)) return false;
+    handledMessageEventRef.current.add(key);
+
+    if (handledMessageEventRef.current.size > 1200) {
+      const first = handledMessageEventRef.current.values().next()
+        .value as string | undefined;
+      if (first) handledMessageEventRef.current.delete(first);
+    }
+    return true;
+  }, []);
+
   useEffect(() => {
     const token = authStore.getTokens()?.accessToken;
     if (!token) return;
@@ -295,6 +351,8 @@ export function MessagesScreen({
       };
 
       if (!normalized.id || !normalized.conversationId) return;
+      const eventKey = `new:${normalized.conversationId}:${normalized.id}`;
+      if (!markMessageEventHandled(eventKey)) return;
 
       if (activeConversationIdRef.current === normalized.conversationId) {
         setMessages((prev) => {
@@ -329,6 +387,9 @@ export function MessagesScreen({
     const onMessageUpdated = (payload: any) => {
       const messageId = String(payload?.id || "");
       if (!messageId) return;
+      const conversationId = String(payload?.conversationId || "");
+      const eventKey = `update:${conversationId}:${messageId}:${Boolean(payload?.isRecalled)}:${Number(payload?.removedForUserId || 0)}`;
+      if (!markMessageEventHandled(eventKey)) return;
 
       if (Number(payload?.removedForUserId || 0) === Number(user.id)) {
         setMessages((prev) => prev.filter((item) => item.id !== messageId));
@@ -452,7 +513,7 @@ export function MessagesScreen({
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
     };
-  }, [loadConversations, openConversation, openVideoCallRoom, user.id]);
+  }, [loadConversations, markMessageEventHandled, openConversation, openVideoCallRoom, user.id]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -1149,10 +1210,15 @@ export function MessagesScreen({
           />
         </>
       ) : (
-        <View className="flex-1">
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 78 : 0}
+        >
           <FlatList
             data={messages}
             keyExtractor={(item) => String(item.id)}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <MessageBubble
                 message={item}
@@ -1197,7 +1263,7 @@ export function MessagesScreen({
               }
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       )}
 
       <Modal

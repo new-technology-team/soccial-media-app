@@ -16,4 +16,13 @@ export interface MessagesScreenProps {
   onInitialDirectHandled?: () => void;
   onOpenUserProfile?: (userId: number) => void;
   onOpenPost?: (postId: string) => void;
+  incomingCallBootstrap?: {
+    conversationId: string;
+    roomId: string;
+    fromUserId: number;
+    fromUserName?: string;
+    targetUserId?: number;
+    routeKey?: number;
+  } | null;
+  onIncomingCallBootstrapHandled?: () => void;
 }

@@ -36,6 +36,14 @@ export default function App() {
     userId: number;
     returnTab: string;
   } | null>(null);
+  const [incomingCallBootstrap, setIncomingCallBootstrap] = useState<{
+    conversationId: string;
+    roomId: string;
+    fromUserId: number;
+    fromUserName?: string;
+    targetUserId?: number;
+    routeKey: number;
+  } | null>(null);
   const [aiReturnTab, setAiReturnTab] = useState("feed");
   const [isRestoring, setIsRestoring] = useState(true);
 
@@ -60,7 +68,30 @@ export default function App() {
     if (!user) return;
     const token = authStore.getTokens()?.accessToken;
     if (!token) return;
-    getSocket(token);
+    const socket = getSocket(token);
+
+    const onCallOffer = (payload: any) => {
+      const conversationId = String(payload?.conversationId || "").trim();
+      const roomId = String(payload?.roomId || "").trim();
+      const fromUserId = Number(payload?.fromUserId || 0);
+      if (!conversationId || !roomId || !fromUserId) return;
+      if (fromUserId === Number(user.id)) return;
+
+      setIncomingCallBootstrap({
+        conversationId,
+        roomId,
+        fromUserId,
+        fromUserName: String(payload?.fromUserName || "Nguoi dung"),
+        targetUserId: Number(payload?.targetUserId || 0) || undefined,
+        routeKey: Date.now(),
+      });
+      setActiveTab("messages");
+    };
+
+    socket.on("call:offer", onCallOffer);
+    return () => {
+      socket.off("call:offer", onCallOffer);
+    };
   }, [user]);
 
   const handleLogin = useCallback((loggedInUser: AuthUser) => {
@@ -107,6 +138,10 @@ export default function App() {
 
   const handleMessageRouteConsumed = useCallback(() => {
     setMessageTarget(null);
+  }, []);
+
+  const handleIncomingCallBootstrapHandled = useCallback(() => {
+    setIncomingCallBootstrap(null);
   }, []);
 
   const openUserProfile = useCallback(
@@ -180,6 +215,8 @@ export default function App() {
             onInitialDirectHandled={handleMessageRouteConsumed}
             onOpenUserProfile={openUserProfile}
             onOpenPost={openPostInFeed}
+            incomingCallBootstrap={incomingCallBootstrap}
+            onIncomingCallBootstrapHandled={handleIncomingCallBootstrapHandled}
           />
         );
       case "friends":
