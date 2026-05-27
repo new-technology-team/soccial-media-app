@@ -152,6 +152,7 @@ export function MessagesScreen({
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
   const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
+  const messageListRef = useRef<FlatList<Message> | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
@@ -186,6 +187,12 @@ export function MessagesScreen({
     conversationsRef.current = conversations;
   }, [conversations]);
 
+  const scrollMessagesToEnd = useCallback((animated = true) => {
+    setTimeout(() => {
+      messageListRef.current?.scrollToEnd({ animated });
+    }, 60);
+  }, []);
+
   const loadConversations = useCallback(async () => {
     try {
       const res = await api.listConversations();
@@ -209,10 +216,11 @@ export function MessagesScreen({
     try {
       const res = await api.listMessages(convId);
       setMessages(res.messages || []);
+      scrollMessagesToEnd(false);
     } catch {
       /* silent */
     }
-  }, []);
+  }, [scrollMessagesToEnd]);
 
   useEffect(() => {
     void loadConversations();
@@ -239,8 +247,9 @@ export function MessagesScreen({
         ),
       );
       await loadMessages(conversation.id);
+      scrollMessagesToEnd(false);
     },
-    [loadMessages],
+    [loadMessages, scrollMessagesToEnd],
   );
 
   useEffect(() => {
@@ -359,6 +368,7 @@ export function MessagesScreen({
           if (prev.some((item) => item.id === normalized.id)) return prev;
           return [...prev, normalized];
         });
+        scrollMessagesToEnd();
       }
 
       setConversations((prev) => {
@@ -513,7 +523,14 @@ export function MessagesScreen({
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
     };
-  }, [loadConversations, markMessageEventHandled, openConversation, openVideoCallRoom, user.id]);
+  }, [
+    loadConversations,
+    markMessageEventHandled,
+    openConversation,
+    openVideoCallRoom,
+    scrollMessagesToEnd,
+    user.id,
+  ]);
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -542,6 +559,11 @@ export function MessagesScreen({
     void loadConversationDetail(selectedConv.id);
   }, [loadConversationDetail, selectedConv?.id]);
 
+  useEffect(() => {
+    if (!selectedConv?.id) return;
+    scrollMessagesToEnd(false);
+  }, [messages.length, scrollMessagesToEnd, selectedConv?.id]);
+
   const {
     showComposeModal,
     composeMode,
@@ -569,21 +591,60 @@ export function MessagesScreen({
   });
 
   const handleSend = useCallback(async () => {
-    if (!messageText.trim() || !selectedConv || isUploadingAttachment) return;
+    const text = messageText.trim();
+    if (!text || !selectedConv || isUploadingAttachment) return;
+
+    const optimisticId = `local-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      conversationId: selectedConv.id,
+      senderId: Number(user.id),
+      senderName: user.fullName || "Nguoi dung",
+      content: text,
+      type: "text",
+      createdAt: new Date().toISOString(),
+      mediaUrl: "",
+      fileName: "",
+      fileSize: 0,
+      meta: null,
+      isRecalled: false,
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setMessageText("");
+    scrollMessagesToEnd();
+
     try {
       const res = await api.sendMessagePayload(selectedConv.id, {
         type: "text",
-        text: messageText.trim(),
+        text,
       });
-      setMessages((prev) => [...prev, res.message]);
-      setMessageText("");
+      setMessages((prev) => {
+        const withoutOptimistic = prev.filter((item) => item.id !== optimisticId);
+        if (withoutOptimistic.some((item) => item.id === res.message.id)) {
+          return withoutOptimistic;
+        }
+        return [...withoutOptimistic, res.message];
+      });
+      scrollMessagesToEnd();
     } catch (err) {
+      setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
+      setMessageText(text);
       Alert.alert(
         "Khong the gui tin nhan",
         err instanceof Error ? err.message : "Vui long thu lai",
       );
     }
-  }, [isUploadingAttachment, messageText, selectedConv]);
+  }, [
+    isUploadingAttachment,
+    messageText,
+    scrollMessagesToEnd,
+    selectedConv,
+    user.fullName,
+    user.id,
+  ]);
 
   const handlePickImage = useCallback(async () => {
     if (!selectedConv) return;
@@ -643,6 +704,7 @@ export function MessagesScreen({
       });
       setMessages((prev) => [...prev, res.message]);
       setMessageText("");
+      scrollMessagesToEnd();
     } catch (err) {
       Alert.alert(
         "Khong the gui anh",
@@ -651,7 +713,7 @@ export function MessagesScreen({
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [messageText, selectedConv]);
+  }, [messageText, scrollMessagesToEnd, selectedConv]);
 
   const handlePickFile = useCallback(async () => {
     if (!selectedConv) return;
@@ -700,6 +762,7 @@ export function MessagesScreen({
       });
       setMessages((prev) => [...prev, res.message]);
       setMessageText("");
+      scrollMessagesToEnd();
     } catch (err) {
       Alert.alert(
         "Khong the gui tep",
@@ -708,7 +771,7 @@ export function MessagesScreen({
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [messageText, selectedConv]);
+  }, [messageText, scrollMessagesToEnd, selectedConv]);
 
   const handleLongPressMessage = useCallback(
     (message: Message) => {
@@ -785,8 +848,22 @@ export function MessagesScreen({
   const conversationTitle = String(
     activeConversation?.name || selectedConv?.name || "Cuoc tro chuyen",
   );
+  const callTargetUserId = useMemo(() => {
+    if (typeof peerUserId === "number" && peerUserId > 0) return peerUserId;
+    const participants = activeConversation?.participants || [];
+    if (participants.length === 2) {
+      const other = participants.find(
+        (item) => Number(item.userId) !== Number(user.id),
+      );
+      if (other?.userId) return Number(other.userId);
+    }
+    return null;
+  }, [activeConversation?.participants, peerUserId, user.id]);
+  const isGroupCallConversation = Boolean(
+    activeConversation?.isGroup && !callTargetUserId,
+  );
   const directConversationBlocked = Boolean(
-    !activeConversation?.isGroup &&
+    !isGroupCallConversation &&
       (activeConversation?.isBlockedByMe || activeConversation?.isBlockedMe),
   );
   const canStartVideoCall = Boolean(
@@ -832,12 +909,14 @@ export function MessagesScreen({
       fromUserId: Number(user.id),
       fromUserName: user.fullName || "Nguoi dung",
       mode: "video",
-      targetUserId: selectedConv.isGroup ? undefined : peerUserId || undefined,
+      targetUserId: isGroupCallConversation
+        ? undefined
+        : callTargetUserId || undefined,
     };
 
     socket.emit("call:offer", payload);
 
-    if (selectedConv.isGroup) {
+    if (isGroupCallConversation) {
       try {
         await openVideoCallRoom(roomId);
       } catch (err) {
@@ -860,11 +939,12 @@ export function MessagesScreen({
       conversationName: conversationTitle,
     });
   }, [
+    callTargetUserId,
     canStartVideoCall,
     conversationTitle,
     emitCallEnd,
+    isGroupCallConversation,
     openVideoCallRoom,
-    peerUserId,
     selectedConv,
     user.fullName,
     user.id,
@@ -925,6 +1005,22 @@ export function MessagesScreen({
       reason: "cancelled",
     });
     setOutgoingCall(null);
+  }, [emitCallEnd, outgoingCall]);
+
+  useEffect(() => {
+    if (!outgoingCall) return;
+    const timer = setTimeout(() => {
+      emitCallEnd({
+        conversationId: outgoingCall.payload.conversationId,
+        roomId: outgoingCall.payload.roomId,
+        targetUserId: outgoingCall.payload.targetUserId,
+        reason: "timeout",
+      });
+      setOutgoingCall(null);
+      Alert.alert("Khong co phan hoi", "Nguoi nhan chua tra loi cuoc goi.");
+    }, 25000);
+
+    return () => clearTimeout(timer);
   }, [emitCallEnd, outgoingCall]);
 
   const handleToggleNotifications = useCallback(async () => {
@@ -1213,12 +1309,14 @@ export function MessagesScreen({
         <KeyboardAvoidingView
           className="flex-1"
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 78 : 0}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 0}
         >
           <FlatList
+            ref={messageListRef}
             data={messages}
             keyExtractor={(item) => String(item.id)}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
+            keyboardDismissMode="interactive"
             renderItem={({ item }) => (
               <MessageBubble
                 message={item}
@@ -1227,13 +1325,15 @@ export function MessagesScreen({
                 onOpenPost={onOpenPost}
               />
             )}
+            onContentSizeChange={() => {
+              scrollMessagesToEnd();
+            }}
             contentContainerStyle={{
-              flexGrow: 1,
-              justifyContent: "flex-end",
               paddingVertical: 12,
+              paddingBottom: 8,
             }}
           />
-          <View style={{ marginBottom: 70 }}>
+          <View style={{ marginBottom: Platform.OS === "ios" ? 82 : 70 }}>
             <MessageInput
               value={messageText}
               onChangeText={setMessageText}
