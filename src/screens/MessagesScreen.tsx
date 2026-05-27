@@ -343,6 +343,13 @@ export function MessagesScreen({
     const socket = getSocket(token);
     socketRef.current = socket;
 
+    const onSocketConnect = () => {
+      const activeConversationId = activeConversationIdRef.current;
+      if (activeConversationId) {
+        socket.emit("join-conversation", activeConversationId);
+      }
+    };
+
     const onMessageNew = (payload: any) => {
       const normalized: Message = {
         id: String(payload?.id || ""),
@@ -516,12 +523,14 @@ export function MessagesScreen({
     socket.on("call:offer", onCallOffer);
     socket.on("call:answer", onCallAnswer);
     socket.on("call:end", onCallEnd);
+    socket.on("connect", onSocketConnect);
     return () => {
       socket.off("message:new", onMessageNew);
       socket.off("message:updated", onMessageUpdated);
       socket.off("call:offer", onCallOffer);
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
+      socket.off("connect", onSocketConnect);
     };
   }, [
     loadConversations,
