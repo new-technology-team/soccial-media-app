@@ -27,7 +27,7 @@ export function MessageBubble({
   const { width: screenWidth } = useWindowDimensions();
   const isSystem = message.type === "system" || Number(message.senderId) === 0;
   const isMe = message.senderId === currentUserId;
-  const imageWidth = Math.min(240, Math.max(160, screenWidth * 0.55));
+  const imageWidth = Math.min(250, Math.max(180, screenWidth * 0.62));
 
   const sharedPostMeta = useMemo(() => {
     if (message.type !== "share_post") return null;
@@ -60,7 +60,7 @@ export function MessageBubble({
     const width = Number((message.meta as any)?.width || 0);
     const height = Number((message.meta as any)?.height || 0);
     if (width > 0 && height > 0) {
-      return Math.min(1.8, Math.max(0.58, width / height));
+      return Math.min(1.6, Math.max(0.75, width / height));
     }
     return 1;
   }, [message.meta, message.type]);
@@ -115,10 +115,10 @@ export function MessageBubble({
               style={{
                 width: imageWidth,
                 aspectRatio: imageRatio,
-                maxHeight: 320,
+                maxHeight: 300,
                 minHeight: 120,
               }}
-              resizeMode="cover"
+              resizeMode="contain"
             />
           ) : null}
 

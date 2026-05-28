@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -178,6 +179,7 @@ export function MessagesScreen({
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
   const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const messageListRef = useRef<FlatList<Message> | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -637,6 +639,19 @@ export function MessagesScreen({
     if (!selectedConv?.id) return;
     scrollMessagesToEnd(false);
   }, [messages.length, scrollMessagesToEnd, selectedConv?.id]);
+
+  useEffect(() => {
+    const onShow = () => setIsKeyboardVisible(true);
+    const onHide = () => setIsKeyboardVisible(false);
+
+    const showSub = Keyboard.addListener('keyboardDidShow', onShow);
+    const hideSub = Keyboard.addListener('keyboardDidHide', onHide);
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const {
     showComposeModal,
@@ -1412,7 +1427,18 @@ export function MessagesScreen({
               paddingBottom: 8,
             }}
           />
-          <View style={{ marginBottom: Platform.OS === "ios" ? 82 : 70 }}>
+          <View
+            style={{
+              marginBottom:
+                Platform.OS === "ios"
+                  ? isKeyboardVisible
+                    ? 8
+                    : 82
+                  : isKeyboardVisible
+                    ? 8
+                    : 70,
+            }}
+          >
             <MessageInput
               value={messageText}
               onChangeText={setMessageText}
