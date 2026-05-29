@@ -27,6 +27,7 @@ import { TopBar } from "../components/common/TopBar";
 import { SearchBar } from "../components/search/SearchBar";
 import { api, authStore, getSocket } from "../lib";
 import type { AuthUser, Conversation, Message } from "../types";
+import { MediaGalleryModal } from "../components/chat/MediaGalleryModal";
 import { ComposeConversationModal } from "./messages/components";
 import { useConversationCompose } from "./messages/hooks";
 import type { MessagesScreenProps } from "./messages/types";
@@ -191,6 +192,7 @@ export function MessagesScreen({
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
   const [forwardTargetMessage, setForwardTargetMessage] = useState<Message | null>(null);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
   const messageListRef = useRef<FlatList<Message> | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -1778,6 +1780,14 @@ export function MessagesScreen({
         }}
       />
 
+      {/* Media Gallery */}
+      <MediaGalleryModal
+        visible={showGallery}
+        conversationId={selectedConv?.id || null}
+        conversationName={conversationTitle}
+        onClose={() => setShowGallery(false)}
+      />
+
       {/* Rename Group Modal */}
       <Modal
         visible={showRenameModal}
@@ -2091,6 +2101,20 @@ export function MessagesScreen({
                 </Text>
               </TouchableOpacity>
             ) : null}
+
+            <TouchableOpacity
+              className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+              onPress={() => {
+                setShowConversationMenu(false);
+                setShowGallery(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Feather name="image" size={16} color="#111827" />
+              <Text className="ml-3 text-sm font-medium text-foreground">
+                Anh, video va tep da chia se
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"

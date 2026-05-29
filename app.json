@@ -13,13 +13,31 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.zchat.mobile"
+      "bundleIdentifier": "com.zchat.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ZChat cần quyền camera để thực hiện cuộc gọi video.",
+        "NSMicrophoneUsageDescription": "ZChat cần quyền micro để thực hiện cuộc gọi âm thanh và video."
+      }
     },
     "android": {
-      "package": "com.zchat.mobile"
+      "package": "com.zchat.mobile",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "4e232d64-6fef-40df-b11a-e3c2c4557571"
+      }
     }
   }
 }

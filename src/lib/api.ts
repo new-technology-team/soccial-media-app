@@ -1052,6 +1052,16 @@ export const api = {
       size: Number(res.size || 0),
     })),
 
+  // Shared content gallery
+  getSharedContent: (conversationId: string | number) =>
+    request<{ photosVideos: any[]; files: any[]; links: any[] }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/shared`,
+    ).then((res) => ({
+      photosVideos: (res.photosVideos || []).map(mapMessage),
+      files: (res.files || []).map(mapMessage),
+      links: (res.links || []).map(mapMessage),
+    })),
+
   // Group management
   renameGroupConversation: (conversationId: string | number, name: string) =>
     request<{ message: string; conversation: any }>(
