@@ -9,7 +9,9 @@ import {
   Platform,
   ActivityIndicator,
   Animated,
+  Alert,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { TopBar } from "../components/common/TopBar";
 import { api } from "../lib/api";
 
@@ -88,6 +90,55 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
   const [isSending, setIsSending] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const flatListRef = useRef<FlatList>(null);
+
+  const handleSummarize = useCallback(async () => {
+    const chatMessages = messages
+      .filter((m) => m.id !== "welcome" && m.text !== "__typing__")
+      .map((m) => ({ role: (m.role === "user" ? "user" : "model") as "user" | "model", text: m.text }));
+    if (chatMessages.length === 0) return;
+    setIsSending(true);
+    try {
+      const res = await api.summarizeChat(chatMessages);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `summary-${Date.now()}`,
+          role: "ai",
+          text: `📋 Tóm tắt cuộc trò chuyện:\n\n${res.summary}`,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } catch {
+      // ignore
+    } finally {
+      setIsSending(false);
+    }
+  }, [messages]);
+
+  const handleLongPressAI = useCallback((msg: ChatMessage) => {
+    Alert.alert("Dịch tin nhắn", "Dịch sang tiếng Việt?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Dịch",
+        onPress: async () => {
+          try {
+            const res = await api.translateMessage(msg.text, "vi");
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `trans-${Date.now()}`,
+                role: "ai",
+                text: `🌐 Bản dịch:\n${res.translatedText}`,
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+          } catch {
+            // ignore
+          }
+        },
+      },
+    ]);
+  }, []);
 
   // Lấy lịch sử chat từ backend
   useEffect(() => {
@@ -203,7 +254,10 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
         )}
 
         <View style={{ maxWidth: "75%" }}>
-          <View
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onLongPress={!isUser && !isTyping ? () => handleLongPressAI(item) : undefined}
+            delayLongPress={500}
             style={{
               backgroundColor: isUser ? "#0052ce" : "#f3f4f6",
               borderRadius: 18,
@@ -230,7 +284,7 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
                 {item.text}
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
           {!isTyping && (
             <Text
               style={{
@@ -266,15 +320,29 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
             : undefined
         }
         rightAction={
-          <View
-            style={{
-              backgroundColor: "#dcfce7",
-              borderRadius: 99,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <Text style={{ fontSize: 11, color: "#16a34a", fontWeight: "600" }}>● Online</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => { void handleSummarize(); }}
+              disabled={isSending || messages.length <= 1}
+              style={{ padding: 4 }}
+              activeOpacity={0.7}
+            >
+              <Feather
+                name="file-text"
+                size={20}
+                color={isSending || messages.length <= 1 ? "#d1d5db" : "#0052ce"}
+              />
+            </TouchableOpacity>
+            <View
+              style={{
+                backgroundColor: "#dcfce7",
+                borderRadius: 99,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ fontSize: 11, color: "#16a34a", fontWeight: "600" }}>● Online</Text>
+            </View>
           </View>
         }
       />

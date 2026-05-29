@@ -28,6 +28,7 @@ interface FeedScreenProps {
   focusPostId?: string | null;
   openCommentsPostId?: string | null;
   onRouteConsumed?: () => void;
+  onHashtagPress?: (tag: string) => void;
 }
 
 type ShareFriend = {
@@ -42,6 +43,7 @@ export function FeedScreen({
   focusPostId,
   openCommentsPostId,
   onRouteConsumed,
+  onHashtagPress,
 }: FeedScreenProps) {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -404,6 +406,7 @@ export function FeedScreen({
               void openShareModal(item);
             }}
             onMenu={() => handleOpenPostMenu(item)}
+            onHashtagPress={onHashtagPress}
           />
         )}
         contentContainerStyle={{ padding: 16, paddingBottom: 100 }}

@@ -1006,6 +1006,24 @@ export const api = {
   aiHistory: () =>
     request<any>("/api/social/ai/history"),
 
+  summarizeChat: (messages: Array<{ role: "user" | "model"; text: string }>) =>
+    request<{ summary: string }>("/api/social/ai/summarize", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
+
+  suggestReplies: (messages: Array<{ role: string; text: string }>, currentUserName: string) =>
+    request<{ suggestions: string[] }>("/api/social/ai/suggest-replies", {
+      method: "POST",
+      body: JSON.stringify({ messages, currentUserName }),
+    }),
+
+  translateMessage: (text: string, targetLanguage = "vi") =>
+    request<{ translatedText: string; detectedLanguage: string }>("/api/social/ai/translate", {
+      method: "POST",
+      body: JSON.stringify({ text, targetLanguage }),
+    }),
+
   // Upload
   uploadAvatarBase64: (payload: {
     fileName: string;

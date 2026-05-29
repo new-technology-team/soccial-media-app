@@ -12,6 +12,28 @@ interface PostCardProps {
   onComment: () => void;
   onShare: () => void;
   onMenu: () => void;
+  onHashtagPress?: (tag: string) => void;
+}
+
+function renderContent(content: string, onHashtagPress?: (tag: string) => void) {
+  const parts = content.split(/(#\w+)/g);
+  return (
+    <Text className="text-foreground text-sm leading-6 mb-4">
+      {parts.map((part, i) =>
+        /^#\w+$/.test(part) ? (
+          <Text
+            key={i}
+            style={{ color: "#0052ce", fontWeight: "600" }}
+            onPress={() => onHashtagPress?.(part.slice(1))}
+          >
+            {part}
+          </Text>
+        ) : (
+          part
+        ),
+      )}
+    </Text>
+  );
 }
 
 export function PostCard({
@@ -21,6 +43,7 @@ export function PostCard({
   onComment,
   onShare,
   onMenu,
+  onHashtagPress,
 }: PostCardProps) {
   void currentUserId;
 
@@ -39,7 +62,7 @@ export function PostCard({
         </TouchableOpacity>
       </View>
 
-      <Text className="text-foreground text-sm leading-6 mb-4">{post.content}</Text>
+      {renderContent(post.content, onHashtagPress)}
 
       {post.mediaUrl ? (
         <Image

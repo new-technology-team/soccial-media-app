@@ -10,7 +10,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { key: "feed", label: "Bang tin", icon: "home" },
-  { key: "search", label: "Tim kiem", icon: "search" },
+  { key: "search", label: "Kham pha", icon: "compass" },
   { key: "messages", label: "Tin nhan", icon: "message-circle" },
   { key: "friends", label: "Ban be", icon: "users" },
   { key: "notifications", label: "Thong bao", icon: "bell" },

@@ -45,6 +45,7 @@ export default function App() {
     routeKey: number;
   } | null>(null);
   const [aiReturnTab, setAiReturnTab] = useState("feed");
+  const [searchInitialQuery, setSearchInitialQuery] = useState<string | undefined>(undefined);
   const [isRestoring, setIsRestoring] = useState(true);
 
   useEffect(() => {
@@ -196,6 +197,10 @@ export default function App() {
             focusPostId={feedFocusPostId}
             openCommentsPostId={feedOpenCommentsPostId}
             onRouteConsumed={handleFeedRouteConsumed}
+            onHashtagPress={(tag) => {
+              setSearchInitialQuery(tag);
+              handleTabChange("search");
+            }}
           />
         );
       case "search":
@@ -204,6 +209,8 @@ export default function App() {
             onOpenPost={openPostInFeed}
             onOpenUserProfile={openUserProfile}
             onOpenAIChat={() => openAIChat("search")}
+            initialQuery={searchInitialQuery}
+            onQueryConsumed={() => setSearchInitialQuery(undefined)}
           />
         );
       case "messages":

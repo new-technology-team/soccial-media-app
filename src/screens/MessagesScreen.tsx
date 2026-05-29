@@ -9,6 +9,7 @@ import {
   Modal,
   Platform,
   RefreshControl,
+  ScrollView,
   Share,
   Text,
   TextInput,
@@ -171,6 +172,8 @@ export function MessagesScreen({
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageText, setMessageText] = useState("");
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [conversationKeyword, setConversationKeyword] = useState("");
   const [showConversationMenu, setShowConversationMenu] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -283,6 +286,7 @@ export function MessagesScreen({
     async (conversation: Conversation) => {
       createdConversationIdsRef.current.add(conversation.id);
       setSelectedConv(conversation);
+      setAiSuggestions([]);
       setConversations((prev) =>
         prev.map((item) =>
           item.id === conversation.id ? { ...item, unreadCount: 0 } : item,
@@ -747,6 +751,23 @@ export function MessagesScreen({
     user.fullName,
     user.id,
   ]);
+
+  const handleGetSuggestions = useCallback(async () => {
+    if (isLoadingSuggestions || !selectedConv) return;
+    setIsLoadingSuggestions(true);
+    try {
+      const last10 = messages.slice(-10).map((m) => ({
+        role: Number(m.senderId) === Number(user.id) ? "user" : "other",
+        text: m.content,
+      }));
+      const res = await api.suggestReplies(last10, user.fullName || "Ban");
+      setAiSuggestions((res.suggestions || []).slice(0, 3));
+    } catch {
+      setAiSuggestions([]);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, [isLoadingSuggestions, selectedConv, messages, user.id, user.fullName]);
 
   const handlePickImage = useCallback(async () => {
     if (!selectedConv) return;
@@ -1636,6 +1657,38 @@ export function MessagesScreen({
               paddingBottom: 8,
             }}
           />
+          {aiSuggestions.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ paddingHorizontal: 12, paddingVertical: 6, flexGrow: 0 }}
+              keyboardShouldPersistTaps="always"
+            >
+              {aiSuggestions.map((s, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => { setMessageText(s); setAiSuggestions([]); }}
+                  style={{
+                    backgroundColor: "#e0e7ff",
+                    borderRadius: 99,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    marginRight: 8,
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 12, color: "#4f46e5" }}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                onPress={() => setAiSuggestions([])}
+                style={{ padding: 7 }}
+                activeOpacity={0.7}
+              >
+                <Feather name="x" size={14} color="#9ca3af" />
+              </TouchableOpacity>
+            </ScrollView>
+          )}
           <View
             style={{
               marginBottom:
@@ -1648,34 +1701,50 @@ export function MessagesScreen({
                     : 70,
             }}
           >
-            <MessageInput
-              value={messageText}
-              onChangeText={setMessageText}
-              onSend={handleSend}
-              onPickImage={() => {
-                void handlePickImage();
-              }}
-              onPickFile={() => {
-                void handlePickFile();
-              }}
-              disabled={Boolean(
-                !activeConversation?.isGroup &&
-                  (activeConversation?.isBlockedByMe ||
-                    activeConversation?.isBlockedMe),
-              )}
-              disableAttachments={isUploadingAttachment}
-              placeholder={
-                !activeConversation?.isGroup &&
-                activeConversation?.isBlockedByMe
-                  ? "Ban dang chan nguoi nay"
-                  : !activeConversation?.isGroup &&
-                      activeConversation?.isBlockedMe
-                    ? "Ban da bi chan tin nhan"
-                    : isUploadingAttachment
-                      ? "Dang tai tep..."
-                      : "Nhan tin..."
-              }
-            />
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TouchableOpacity
+                onPress={() => { void handleGetSuggestions(); }}
+                disabled={isLoadingSuggestions}
+                style={{ paddingHorizontal: 8, paddingVertical: 10 }}
+                activeOpacity={0.7}
+              >
+                {isLoadingSuggestions ? (
+                  <ActivityIndicator size="small" color="#0052ce" />
+                ) : (
+                  <Feather name="zap" size={20} color="#0052ce" />
+                )}
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <MessageInput
+                  value={messageText}
+                  onChangeText={setMessageText}
+                  onSend={handleSend}
+                  onPickImage={() => {
+                    void handlePickImage();
+                  }}
+                  onPickFile={() => {
+                    void handlePickFile();
+                  }}
+                  disabled={Boolean(
+                    !activeConversation?.isGroup &&
+                      (activeConversation?.isBlockedByMe ||
+                        activeConversation?.isBlockedMe),
+                  )}
+                  disableAttachments={isUploadingAttachment}
+                  placeholder={
+                    !activeConversation?.isGroup &&
+                    activeConversation?.isBlockedByMe
+                      ? "Ban dang chan nguoi nay"
+                      : !activeConversation?.isGroup &&
+                          activeConversation?.isBlockedMe
+                        ? "Ban da bi chan tin nhan"
+                        : isUploadingAttachment
+                          ? "Dang tai tep..."
+                          : "Nhan tin..."
+                  }
+                />
+              </View>
+            </View>
           </View>
         </KeyboardAvoidingView>
       )}
