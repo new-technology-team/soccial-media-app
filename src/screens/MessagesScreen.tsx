@@ -9,7 +9,9 @@ import {
   Modal,
   Platform,
   RefreshControl,
+  Share,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -24,7 +26,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { TopBar } from "../components/common/TopBar";
 import { SearchBar } from "../components/search/SearchBar";
 import { api, authStore, getSocket } from "../lib";
-import type { Conversation, Message } from "../types";
+import type { AuthUser, Conversation, Message } from "../types";
 import { ComposeConversationModal } from "./messages/components";
 import { useConversationCompose } from "./messages/hooks";
 import type { MessagesScreenProps } from "./messages/types";
@@ -180,6 +182,15 @@ export function MessagesScreen({
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
   const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
+  const [renameGroupInput, setRenameGroupInput] = useState("");
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addMemberKeyword, setAddMemberKeyword] = useState("");
+  const [addMemberResults, setAddMemberResults] = useState<AuthUser[]>([]);
+  const [isSearchingAddMember, setIsSearchingAddMember] = useState(false);
+  const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
+  const [forwardTargetMessage, setForwardTargetMessage] = useState<Message | null>(null);
+  const [isForwarding, setIsForwarding] = useState(false);
   const messageListRef = useRef<FlatList<Message> | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -862,16 +873,89 @@ export function MessagesScreen({
     }
   }, [messageText, scrollMessagesToEnd, selectedConv]);
 
+  const handleReactMessage = useCallback(
+    async (message: Message, emoji: string) => {
+      setEmojiPickerMessage(null);
+      try {
+        const res = await api.reactMessage(message.id, emoji);
+        if (res.message?.id) {
+          setMessages((prev) =>
+            prev.map((item) => (item.id === res.message!.id ? res.message! : item)),
+          );
+        }
+      } catch {
+        /* silent — reaction không critical */
+      }
+    },
+    [],
+  );
+
+  const handleForwardMessage = useCallback(
+    async (targetConvId: string) => {
+      if (!forwardTargetMessage) return;
+      setIsForwarding(true);
+      try {
+        await api.forwardMessage(forwardTargetMessage.id, targetConvId);
+        setForwardTargetMessage(null);
+        Alert.alert("Da chuyen tiep", "Tin nhan da duoc chuyen tiep thanh cong.");
+      } catch (err) {
+        Alert.alert(
+          "Khong the chuyen tiep",
+          err instanceof Error ? err.message : "Vui long thu lai",
+        );
+      } finally {
+        setIsForwarding(false);
+      }
+    },
+    [forwardTargetMessage],
+  );
+
   const handleLongPressMessage = useCallback(
     (message: Message) => {
-      if (!selectedConv) return;
-      if (message.senderId !== user.id) return;
-      if (message.isRecalled) return;
+      if (!selectedConv || message.isRecalled) return;
+      const isMe = message.senderId === Number(user.id);
+      const hasText = String(message.content || "").trim().length > 0;
 
-      Alert.alert("Thu hoi tin nhan", "Chon pham vi thu hoi", [
-        { text: "Huy", style: "cancel" },
-        {
-          text: "Thu hoi ben toi",
+      const actions: Array<{
+        text: string;
+        style?: "cancel" | "destructive" | "default";
+        onPress?: () => void;
+      }> = [{ text: "Huy", style: "cancel" }];
+
+      if (hasText) {
+        actions.push({
+          text: "Sao chep noi dung",
+          onPress: () => {
+            void Share.share({ message: String(message.content || "") });
+          },
+        });
+      }
+
+      actions.push({
+        text: "React cam xuc",
+        onPress: () => setEmojiPickerMessage(message),
+      });
+
+      actions.push({
+        text: "Chuyen tiep",
+        onPress: () => setForwardTargetMessage(message),
+      });
+
+      if (isMe) {
+        actions.push({
+          text: "Ghim tin nhan",
+          onPress: async () => {
+            try {
+              await api.pinMessage(message.id);
+            } catch (err) {
+              Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+            }
+          },
+        });
+
+        actions.push({
+          text: "Thu hoi (chi minh)",
+          style: "destructive",
           onPress: async () => {
             try {
               const res = await api.recallMessage(selectedConv.id, message.id, "me");
@@ -879,33 +963,30 @@ export function MessagesScreen({
                 setMessages((prev) => prev.filter((item) => item.id !== message.id));
               }
             } catch (err) {
-              Alert.alert(
-                "Khong the thu hoi",
-                err instanceof Error ? err.message : "Vui long thu lai",
-              );
+              Alert.alert("Khong the thu hoi", err instanceof Error ? err.message : "Vui long thu lai");
             }
           },
-        },
-        {
-          text: "Thu hoi tat ca",
+        });
+
+        actions.push({
+          text: "Thu hoi (tat ca)",
+          style: "destructive",
           onPress: async () => {
             try {
               const res = await api.recallMessage(selectedConv.id, message.id, "all");
-              const recalledMessage = res.message;
-              if (recalledMessage) {
+              if (res.message) {
                 setMessages((prev) =>
-                  prev.map((item) => (item.id === message.id ? recalledMessage : item)),
+                  prev.map((item) => (item.id === message.id ? res.message! : item)),
                 );
               }
             } catch (err) {
-              Alert.alert(
-                "Khong the thu hoi",
-                err instanceof Error ? err.message : "Vui long thu lai",
-              );
+              Alert.alert("Khong the thu hoi", err instanceof Error ? err.message : "Vui long thu lai");
             }
           },
-        },
-      ]);
+        });
+      }
+
+      Alert.alert("Tin nhan", undefined, actions);
     },
     [selectedConv, user.id],
   );
@@ -1283,6 +1364,132 @@ export function MessagesScreen({
     );
   }, [loadConversations, selectedConv]);
 
+  const handleRenameGroup = useCallback(async () => {
+    if (!selectedConv || !renameGroupInput.trim()) return;
+    setIsMutatingConversation(true);
+    try {
+      await api.renameGroupConversation(selectedConv.id, renameGroupInput.trim());
+      const newName = renameGroupInput.trim();
+      setSelectedConv((prev) => (prev ? { ...prev, name: newName } : prev));
+      setConversations((prev) =>
+        prev.map((item) =>
+          item.id === selectedConv.id ? { ...item, name: newName } : item,
+        ),
+      );
+      await loadConversationDetail(selectedConv.id);
+      setShowRenameModal(false);
+    } catch (err) {
+      Alert.alert(
+        "Khong the doi ten nhom",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsMutatingConversation(false);
+    }
+  }, [loadConversationDetail, renameGroupInput, selectedConv]);
+
+  const handleSearchAddMember = useCallback(async (keyword: string) => {
+    setAddMemberKeyword(keyword);
+    if (!keyword.trim()) {
+      setAddMemberResults([]);
+      return;
+    }
+    setIsSearchingAddMember(true);
+    try {
+      const res = await api.searchUsers(keyword.trim());
+      const existingIds = new Set(
+        (activeConversation?.members || []).map((m) => m.userId),
+      );
+      setAddMemberResults(
+        res.users.filter((u) => !existingIds.has(u.id) && u.id !== user.id),
+      );
+    } catch {
+      /* silent */
+    } finally {
+      setIsSearchingAddMember(false);
+    }
+  }, [activeConversation?.members, user.id]);
+
+  const handleAddMember = useCallback(
+    async (targetUserId: number) => {
+      if (!selectedConv) return;
+      setIsMutatingConversation(true);
+      try {
+        await api.addGroupMember(selectedConv.id, targetUserId);
+        await loadConversationDetail(selectedConv.id);
+        setAddMemberResults((prev) => prev.filter((u) => u.id !== targetUserId));
+      } catch (err) {
+        Alert.alert(
+          "Khong the them thanh vien",
+          err instanceof Error ? err.message : "Vui long thu lai",
+        );
+      } finally {
+        setIsMutatingConversation(false);
+      }
+    },
+    [loadConversationDetail, selectedConv],
+  );
+
+  const handleMemberLongPress = useCallback(
+    (member: { userId: number; fullName: string; role?: string }) => {
+      if (!selectedConv || !activeConversation?.isGroup) return;
+      const isMe = member.userId === Number(user.id);
+      const amLeader = myMemberRole === "leader";
+      const amDeputy = myMemberRole === "deputy";
+      if (isMe || (!amLeader && !amDeputy)) return;
+
+      const options: Array<{
+        text: string;
+        style?: "cancel" | "destructive" | "default";
+        onPress?: () => void;
+      }> = [{ text: "Huy", style: "cancel" }];
+
+      if (amLeader) {
+        if (member.role !== "deputy") {
+          options.push({
+            text: "Phan quyen Pho nhom",
+            onPress: async () => {
+              try {
+                await api.changeGroupMemberRole(selectedConv.id, member.userId, "deputy");
+                await loadConversationDetail(selectedConv.id);
+              } catch (err) {
+                Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+              }
+            },
+          });
+        } else {
+          options.push({
+            text: "Bo quyen Pho nhom",
+            onPress: async () => {
+              try {
+                await api.changeGroupMemberRole(selectedConv.id, member.userId, "member");
+                await loadConversationDetail(selectedConv.id);
+              } catch (err) {
+                Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+              }
+            },
+          });
+        }
+      }
+
+      options.push({
+        text: "Xoa khoi nhom",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.removeGroupMember(selectedConv.id, member.userId);
+            await loadConversationDetail(selectedConv.id);
+          } catch (err) {
+            Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+          }
+        },
+      });
+
+      Alert.alert(member.fullName, "Chon hanh dong", options);
+    },
+    [activeConversation?.isGroup, loadConversationDetail, myMemberRole, selectedConv, user.id],
+  );
+
   return (
     <View className="flex-1 bg-background">
       <TopBar
@@ -1571,6 +1778,217 @@ export function MessagesScreen({
         }}
       />
 
+      {/* Rename Group Modal */}
+      <Modal
+        visible={showRenameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRenameModal(false)}
+      >
+        <View className="flex-1 bg-black/35 items-center justify-center px-6">
+          <View className="w-full rounded-2xl bg-surface border border-border p-5">
+            <Text className="text-base font-bold text-foreground mb-3">
+              Doi ten nhom
+            </Text>
+            <TextInput
+              className="h-11 border border-border rounded-xl px-3 text-sm text-foreground bg-surface-secondary mb-4"
+              value={renameGroupInput}
+              onChangeText={setRenameGroupInput}
+              placeholder="Nhap ten nhom moi..."
+              placeholderTextColor="#9ca3af"
+              maxLength={60}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => { void handleRenameGroup(); }}
+            />
+            <View className="flex-row">
+              <TouchableOpacity
+                className="flex-1 h-11 rounded-xl border border-border items-center justify-center mr-2"
+                onPress={() => setShowRenameModal(false)}
+              >
+                <Text className="text-sm font-semibold text-muted-foreground">Huy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className={`flex-1 h-11 rounded-xl items-center justify-center ml-2 ${
+                  isMutatingConversation || !renameGroupInput.trim()
+                    ? "bg-primary/50"
+                    : "bg-primary"
+                }`}
+                onPress={() => { void handleRenameGroup(); }}
+                disabled={isMutatingConversation || !renameGroupInput.trim()}
+                activeOpacity={0.85}
+              >
+                {isMutatingConversation ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text className="text-white font-semibold text-sm">Luu</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Emoji Reaction Picker */}
+      <Modal
+        visible={Boolean(emojiPickerMessage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEmojiPickerMessage(null)}
+      >
+        <TouchableOpacity
+          className="flex-1 bg-black/40 items-center justify-center"
+          activeOpacity={1}
+          onPress={() => setEmojiPickerMessage(null)}
+        >
+          <View className="bg-surface border border-border rounded-2xl px-5 py-4 flex-row">
+            {(["👍", "❤️", "😆", "😮", "😢", "😡"] as const).map((emoji) => (
+              <TouchableOpacity
+                key={emoji}
+                className="w-11 h-11 items-center justify-center mx-1"
+                onPress={() => {
+                  if (emojiPickerMessage) {
+                    void handleReactMessage(emojiPickerMessage, emoji);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 28 }}>{emoji}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Forward Message Picker */}
+      <Modal
+        visible={Boolean(forwardTargetMessage)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setForwardTargetMessage(null)}
+      >
+        <View className="flex-1 bg-black/35 justify-end">
+          <View className="bg-surface rounded-t-3xl px-4 pt-4 pb-6 border-t border-border" style={{ maxHeight: "65%" }}>
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-base font-bold text-foreground">Chuyen tiep den</Text>
+              <TouchableOpacity onPress={() => setForwardTargetMessage(null)}>
+                <Feather name="x" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={conversations}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  className="flex-row items-center py-3 border-b border-border"
+                  onPress={() => { void handleForwardMessage(item.id); }}
+                  disabled={isForwarding}
+                  activeOpacity={0.75}
+                >
+                  <View className="w-9 h-9 rounded-full bg-surface-secondary items-center justify-center mr-3">
+                    <Text className="text-sm font-semibold text-foreground">
+                      {String(item.name || "?").slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
+                    {item.name || "Cuoc tro chuyen"}
+                  </Text>
+                  {isForwarding ? (
+                    <ActivityIndicator size="small" color="#0052ce" />
+                  ) : (
+                    <Feather name="send" size={16} color="#0052ce" />
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View className="py-6 items-center">
+                  <Text className="text-sm text-muted-foreground">Chua co cuoc tro chuyen nao</Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Member Modal */}
+      <Modal
+        visible={showAddMemberModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowAddMemberModal(false);
+          setAddMemberKeyword("");
+          setAddMemberResults([]);
+        }}
+      >
+        <View className="flex-1 bg-black/35 justify-end">
+          <View
+            className="bg-surface rounded-t-3xl px-4 pt-4 pb-6 border-t border-border"
+            style={{ maxHeight: "75%" }}
+          >
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-base font-bold text-foreground">
+                Them thanh vien
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowAddMemberModal(false);
+                  setAddMemberKeyword("");
+                  setAddMemberResults([]);
+                }}
+              >
+                <Feather name="x" size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <SearchBar
+              value={addMemberKeyword}
+              onChangeText={(text) => { void handleSearchAddMember(text); }}
+              placeholder="Tim nguoi dung de them..."
+            />
+            {isSearchingAddMember ? (
+              <View className="py-4 items-center">
+                <ActivityIndicator color="#0052ce" />
+              </View>
+            ) : (
+              <FlatList
+                data={addMemberResults}
+                keyExtractor={(item) => String(item.id)}
+                keyboardShouldPersistTaps="always"
+                renderItem={({ item }) => (
+                  <View className="flex-row items-center py-2.5 border-b border-border">
+                    <View className="w-9 h-9 rounded-full bg-surface-secondary items-center justify-center mr-3">
+                      <Text className="text-sm font-semibold text-foreground">
+                        {String(item.fullName || "U").slice(0, 1).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text className="flex-1 text-sm text-foreground">
+                      {item.fullName}
+                    </Text>
+                    <TouchableOpacity
+                      className="px-3 py-1.5 rounded-full bg-primary"
+                      onPress={() => { void handleAddMember(item.id); }}
+                      disabled={isMutatingConversation}
+                      activeOpacity={0.8}
+                    >
+                      <Text className="text-white text-xs font-semibold">Them</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                ListEmptyComponent={
+                  <View className="py-6 items-center">
+                    <Text className="text-sm text-muted-foreground">
+                      {addMemberKeyword.trim()
+                        ? "Khong tim thay nguoi dung"
+                        : "Nhap ten hoac email de tim..."}
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={showConversationMenu}
         transparent
@@ -1619,6 +2037,41 @@ export function MessagesScreen({
                 <Feather name="users" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
                   Xem thanh vien
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {activeConversation?.isGroup ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+                onPress={() => {
+                  setShowConversationMenu(false);
+                  setRenameGroupInput(String(activeConversation?.name || ""));
+                  setShowRenameModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="edit-2" size={16} color="#111827" />
+                <Text className="ml-3 text-sm font-medium text-foreground">
+                  Doi ten nhom
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {activeConversation?.isGroup && (myMemberRole === "leader" || myMemberRole === "deputy") ? (
+              <TouchableOpacity
+                className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+                onPress={() => {
+                  setShowConversationMenu(false);
+                  setAddMemberKeyword("");
+                  setAddMemberResults([]);
+                  setShowAddMemberModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="user-plus" size={16} color="#111827" />
+                <Text className="ml-3 text-sm font-medium text-foreground">
+                  Them thanh vien
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -1748,24 +2201,43 @@ export function MessagesScreen({
             <FlatList
               data={activeConversation?.members || []}
               keyExtractor={(item) => String(item.userId)}
-              renderItem={({ item }) => (
-                <View className="py-2.5 border-b border-border flex-row items-center justify-between">
-                  <View className="flex-row items-center">
-                    <View className="w-8 h-8 rounded-full bg-surface-secondary items-center justify-center mr-3">
-                      <Text className="text-xs text-foreground font-semibold">
-                        {String(item.fullName || "U")
-                          .trim()
-                          .slice(0, 1)
-                          .toUpperCase()}
+              renderItem={({ item }) => {
+                const isMe = item.userId === Number(user.id);
+                const canManage =
+                  !isMe && (myMemberRole === "leader" || myMemberRole === "deputy");
+                return (
+                  <TouchableOpacity
+                    className="py-2.5 border-b border-border flex-row items-center justify-between"
+                    onLongPress={() => handleMemberLongPress(item)}
+                    activeOpacity={canManage ? 0.7 : 1}
+                  >
+                    <View className="flex-row items-center flex-1">
+                      <View className="w-8 h-8 rounded-full bg-surface-secondary items-center justify-center mr-3">
+                        <Text className="text-xs text-foreground font-semibold">
+                          {String(item.fullName || "U")
+                            .trim()
+                            .slice(0, 1)
+                            .toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text className="text-sm text-foreground flex-1">
+                        {item.fullName}
+                        {isMe ? " (ban)" : ""}
                       </Text>
                     </View>
-                    <Text className="text-sm text-foreground">{item.fullName}</Text>
-                  </View>
-                  {item.role ? (
-                    <Text className="text-xs text-muted-foreground">{item.role}</Text>
-                  ) : null}
-                </View>
-              )}
+                    <View className="flex-row items-center">
+                      {item.role ? (
+                        <Text className="text-xs text-muted-foreground mr-2">
+                          {item.role}
+                        </Text>
+                      ) : null}
+                      {canManage ? (
+                        <Feather name="more-vertical" size={14} color="#9ca3af" />
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
               ListEmptyComponent={
                 <View className="py-6 items-center">
                   <Text className="text-sm text-muted-foreground">

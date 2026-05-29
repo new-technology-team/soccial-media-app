@@ -74,8 +74,8 @@ async function refreshAccessToken(): Promise<string | null> {
       }
 
       const data = parseJsonSafe(result.responseText);
-      const nextAccessToken = String(data?.access_token || "").trim();
-      const nextRefreshToken = String(data?.refresh_token || refreshToken).trim();
+      const nextAccessToken = String(data?.accessToken || data?.access_token || "").trim();
+      const nextRefreshToken = String(data?.refreshToken || data?.refresh_token || refreshToken).trim();
 
       if (!nextAccessToken) return null;
 
@@ -466,12 +466,12 @@ export const api = {
     }),
 
   verifyRegistration: (payload: { emailOrPhone: string; code: string }) =>
-    request<{ access_token: string; refresh_token: string; user: AuthUser }>("/api/auth/verify-registration", {
+    request<{ accessToken: string; refreshToken: string; user: AuthUser }>("/api/auth/verify-registration", {
       method: "POST",
       body: JSON.stringify(payload),
     }).then((res) => ({
-      accessToken: res.access_token,
-      refreshToken: res.refresh_token,
+      accessToken: res.accessToken,
+      refreshToken: res.refreshToken,
       user: res.user,
     })),
 
@@ -488,12 +488,12 @@ export const api = {
     }),
 
   login: (payload: LoginPayload) =>
-    request<{ access_token: string; refresh_token: string; user: AuthUser }>("/api/auth/login", {
+    request<{ accessToken: string; refreshToken: string; user: AuthUser }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify(payload),
     }).then((res) => ({
-      accessToken: res.access_token,
-      refreshToken: res.refresh_token,
+      accessToken: res.accessToken,
+      refreshToken: res.refreshToken,
       user: res.user,
     })),
 
@@ -801,6 +801,45 @@ export const api = {
       },
     ).then((res) => ({ message: mapMessage(res.message) })),
 
+  // Message actions
+  reactMessage: (messageId: string | number, type: string = "like") =>
+    request<{ message: any }>(
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}/reaction`,
+      {
+        method: "POST",
+        body: JSON.stringify({ type }),
+      },
+    ).then((res) => ({ message: mapMessage((res as any)?.message ?? res) })),
+
+  unreactMessage: (messageId: string | number) =>
+    request<{ message: any }>(
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}/reaction`,
+      {
+        method: "DELETE",
+      },
+    ).then((res) => ({ message: mapMessage((res as any)?.message ?? res) })),
+
+  forwardMessage: (messageId: string | number, targetConversationId: string | number) =>
+    request<{ message: any }>(
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}/forward`,
+      {
+        method: "POST",
+        body: JSON.stringify({ targetConversationId: String(targetConversationId) }),
+      },
+    ).then((res) => ({ message: mapMessage((res as any)?.message ?? res) })),
+
+  pinMessage: (messageId: string | number) =>
+    request<{ message: string }>(
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}/pin`,
+      { method: "PATCH" },
+    ),
+
+  unpinMessage: (messageId: string | number) =>
+    request<{ message: string }>(
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}/pin`,
+      { method: "DELETE" },
+    ),
+
   recallMessage: (
     conversationId: string | number,
     messageId: string | number,
@@ -872,6 +911,32 @@ export const api = {
     ).then((res) => ({
       posts: (res.posts || []).map(mapFeedPost),
     })),
+
+  // Privacy settings
+  getPrivacySettings: () =>
+    request<{
+      settings: {
+        privacyLastSeen: boolean;
+        privacyProfilePhoto: boolean;
+        allowFriendRequests: boolean;
+      };
+    }>("/api/social/users/settings").then((res) => res.settings),
+
+  updatePrivacySettings: (payload: {
+    privacyLastSeen?: boolean;
+    privacyProfilePhoto?: boolean;
+    allowFriendRequests?: boolean;
+  }) =>
+    request<{
+      settings: {
+        privacyLastSeen: boolean;
+        privacyProfilePhoto: boolean;
+        allowFriendRequests: boolean;
+      };
+    }>("/api/social/users/settings", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then((res) => res.settings),
 
   // Reports
   submitReport: (payload: {
@@ -986,4 +1051,65 @@ export const api = {
       contentType: String(res.contentType || payload.contentType || ""),
       size: Number(res.size || 0),
     })),
+
+  // Group management
+  renameGroupConversation: (conversationId: string | number, name: string) =>
+    request<{ message: string; conversation: any }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      },
+    ).then((res) => ({
+      message: String((res as any)?.message || "Da doi ten nhom"),
+      conversation: mapConversation((res as any)?.conversation || {}),
+    })),
+
+  addGroupMember: (conversationId: string | number, userId: number) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      },
+    ),
+
+  removeGroupMember: (conversationId: string | number, userId: number) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/members/${encodeURIComponent(String(userId))}`,
+      {
+        method: "DELETE",
+      },
+    ),
+
+  changeGroupMemberRole: (
+    conversationId: string | number,
+    userId: number,
+    role: "leader" | "deputy" | "member",
+  ) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/members/${encodeURIComponent(String(userId))}/role`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ role }),
+      },
+    ),
+
+  // Notifications
+  deleteNotification: (id: string | number) =>
+    request<{ message: string }>(
+      `/api/social/notifications/${encodeURIComponent(String(id))}`,
+      {
+        method: "DELETE",
+      },
+    ),
+
+  // Comments
+  deleteComment: (commentId: string | number) =>
+    request<{ message: string }>(
+      `/api/social/comments/${encodeURIComponent(String(commentId))}`,
+      {
+        method: "DELETE",
+      },
+    ),
 };

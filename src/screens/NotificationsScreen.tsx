@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, FlatList, RefreshControl } from "react-native";
+import { Alert, TouchableOpacity, View, FlatList, RefreshControl, Text } from "react-native";
 import { TopBar } from "../components/common/TopBar";
 import { EmptyState } from "../components/common/EmptyState";
 import { NotificationItem } from "../components/notifications/NotificationItem";
@@ -68,6 +68,24 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
     };
   }, []);
 
+  const handleDeleteNotification = useCallback((item: Notification) => {
+    Alert.alert("Xoa thong bao", "Ban muon xoa thong bao nay?", [
+      { text: "Huy", style: "cancel" },
+      {
+        text: "Xoa",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteNotification(item.id);
+            setNotifications((prev) => prev.filter((n) => n.id !== item.id));
+          } catch {
+            /* silent */
+          }
+        },
+      },
+    ]);
+  }, []);
+
   const handlePressNotification = async (item: Notification) => {
     const isRead = Boolean(item.isRead ?? item.is_read);
     if (!isRead) {
@@ -103,12 +121,28 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
         data={notifications}
         keyExtractor={(item) => String(item.id)}
         renderItem={({ item }) => (
-          <NotificationItem
-            notification={item}
-            onPress={() => {
-              void handlePressNotification(item);
-            }}
-          />
+          <TouchableOpacity
+            onPress={() => { void handlePressNotification(item); }}
+            onLongPress={() => handleDeleteNotification(item)}
+            activeOpacity={0.85}
+          >
+            <View className="flex-row items-center pr-2">
+              <View className="flex-1">
+                <NotificationItem
+                  notification={item}
+                  onPress={() => { void handlePressNotification(item); }}
+                />
+              </View>
+              <TouchableOpacity
+                className="w-8 h-8 items-center justify-center ml-1"
+                onPress={() => handleDeleteNotification(item)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <Text className="text-muted-foreground text-base">✕</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         )}
         refreshControl={
           <RefreshControl

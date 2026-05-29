@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   View,
   Text,
   FlatList,
@@ -118,6 +119,24 @@ export function PostCommentsScreen({
     }
   };
 
+  const handleDeleteComment = async (comment: FeedComment) => {
+    Alert.alert("Xoa binh luan", "Ban chac chan muon xoa binh luan nay?", [
+      { text: "Huy", style: "cancel" },
+      {
+        text: "Xoa",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteComment(comment.id);
+            setComments((prev) => prev.filter((c) => c.id !== comment.id && c.parentId !== comment.id));
+          } catch {
+            /* silent */
+          }
+        },
+      },
+    ]);
+  };
+
   const handleReactComment = async (comment: FeedComment, type: string) => {
     if (!comment?.id) return;
     setReactingCommentId(comment.id);
@@ -180,9 +199,18 @@ export function PostCommentsScreen({
               <Text className="text-primary text-xs font-semibold mr-2">
                 {myComment ? "Bạn" : item.authorName}
               </Text>
-              <Text className="text-muted-foreground text-[10px]">
+              <Text className="text-muted-foreground text-[10px] flex-1">
                 {formatTime(item.createdAt)}
               </Text>
+              {myComment ? (
+                <TouchableOpacity
+                  onPress={() => { void handleDeleteComment(item); }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-muted-foreground text-xs">✕</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <Text className="text-foreground text-sm leading-5">

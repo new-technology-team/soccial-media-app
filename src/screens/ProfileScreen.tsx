@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -45,6 +46,11 @@ export function ProfileScreen({
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [status, setStatus] = useState("");
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [privacyLastSeen, setPrivacyLastSeen] = useState(false);
+  const [privacyProfilePhoto, setPrivacyProfilePhoto] = useState(false);
+  const [allowFriendRequests, setAllowFriendRequests] = useState(true);
+  const [isLoadingPrivacy, setIsLoadingPrivacy] = useState(true);
+  const [savingPrivacyKey, setSavingPrivacyKey] = useState<string | null>(null);
 
   useEffect(() => {
     setFullName(user.fullName);
@@ -52,6 +58,44 @@ export function ProfileScreen({
     setGender(user.gender || "");
     setAvatarUrl(user.avatarUrl || null);
   }, [user]);
+
+  useEffect(() => {
+    let canceled = false;
+    api.getPrivacySettings()
+      .then((s) => {
+        if (canceled) return;
+        setPrivacyLastSeen(Boolean(s.privacyLastSeen));
+        setPrivacyProfilePhoto(Boolean(s.privacyProfilePhoto));
+        setAllowFriendRequests(Boolean(s.allowFriendRequests));
+      })
+      .catch(() => { /* silent */ })
+      .finally(() => { if (!canceled) setIsLoadingPrivacy(false); });
+    return () => { canceled = true; };
+  }, []);
+
+  const handleTogglePrivacy = async (
+    key: "privacyLastSeen" | "privacyProfilePhoto" | "allowFriendRequests",
+    value: boolean,
+  ) => {
+    if (key === "privacyLastSeen") setPrivacyLastSeen(value);
+    else if (key === "privacyProfilePhoto") setPrivacyProfilePhoto(value);
+    else setAllowFriendRequests(value);
+
+    setSavingPrivacyKey(key);
+    try {
+      const updated = await api.updatePrivacySettings({ [key]: value });
+      setPrivacyLastSeen(Boolean(updated.privacyLastSeen));
+      setPrivacyProfilePhoto(Boolean(updated.privacyProfilePhoto));
+      setAllowFriendRequests(Boolean(updated.allowFriendRequests));
+    } catch {
+      // revert on error
+      if (key === "privacyLastSeen") setPrivacyLastSeen(!value);
+      else if (key === "privacyProfilePhoto") setPrivacyProfilePhoto(!value);
+      else setAllowFriendRequests(!value);
+    } finally {
+      setSavingPrivacyKey(null);
+    }
+  };
 
   const normalizeGender = (value: string) => {
     const lower = value.trim().toLowerCase();
@@ -286,6 +330,55 @@ export function ProfileScreen({
               Quan ly tai khoan va mat khau
             </Text>
           </TouchableOpacity>
+        </Card>
+
+        <Card style={{ marginBottom: 12 }}>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-base font-bold text-foreground">Quyen rieng tu</Text>
+            {isLoadingPrivacy ? <ActivityIndicator size="small" color="#0052ce" /> : null}
+          </View>
+
+          {[
+            {
+              key: "privacyLastSeen" as const,
+              label: "Hien thi lan cuoi hoat dong",
+              desc: "Nguoi khac co the thay ban hoat dong khi nao",
+              value: privacyLastSeen,
+            },
+            {
+              key: "privacyProfilePhoto" as const,
+              label: "Anh dai dien cong khai",
+              desc: "Tat ca moi nguoi co the xem anh dai dien cua ban",
+              value: privacyProfilePhoto,
+            },
+            {
+              key: "allowFriendRequests" as const,
+              label: "Nhan loi moi ket ban",
+              desc: "Cho phep nguoi khac gui loi moi ket ban den ban",
+              value: allowFriendRequests,
+            },
+          ].map((item, index, arr) => (
+            <View
+              key={item.key}
+              className={`flex-row items-center justify-between py-3 ${index < arr.length - 1 ? "border-b border-border" : ""}`}
+            >
+              <View className="flex-1 pr-3">
+                <Text className="text-sm font-semibold text-foreground">{item.label}</Text>
+                <Text className="text-xs text-muted-foreground mt-0.5">{item.desc}</Text>
+              </View>
+              {savingPrivacyKey === item.key ? (
+                <ActivityIndicator size="small" color="#0052ce" />
+              ) : (
+                <Switch
+                  value={item.value}
+                  onValueChange={(v) => { void handleTogglePrivacy(item.key, v); }}
+                  disabled={isLoadingPrivacy || savingPrivacyKey !== null}
+                  trackColor={{ false: "#e5e7eb", true: "#93c5fd" }}
+                  thumbColor={item.value ? "#0052ce" : "#f3f4f6"}
+                />
+              )}
+            </View>
+          ))}
         </Card>
 
         {status ? (
