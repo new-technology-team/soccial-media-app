@@ -19,60 +19,40 @@ export function PendingRequestRow({
   onReject,
 }: PendingRequestRowProps) {
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: "#fff",
-        borderBottomWidth: 1,
-        borderBottomColor: "#f3f4f6",
-      }}
-    >
+    <View className="flex-row items-center px-4 py-3 bg-surface border-b border-border">
       <TouchableOpacity
-        style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+        className="flex-1 flex-row items-center"
         activeOpacity={0.75}
         onPress={() => onOpenUserProfile?.(item.id)}
       >
         <SmallAvatar name={item.fullName} avatarUrl={item.avatarUrl} />
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={{ fontSize: 15, fontWeight: "600", color: "#111827" }}>{item.fullName}</Text>
-          <Text style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Dang cho ban xac nhan</Text>
+        <View className="flex-1 ml-3">
+          <Text className="text-[15px] font-semibold text-foreground">{item.fullName}</Text>
+          <Text className="text-xs text-muted-foreground mt-0.5">Muốn kết bạn với bạn</Text>
         </View>
       </TouchableOpacity>
 
-      <View style={{ flexDirection: "row", gap: 6 }}>
+      <View className="flex-row gap-2">
         <TouchableOpacity
+          className="bg-primary px-3 py-2 rounded-lg"
           onPress={() => onAccept(item.id)}
           disabled={Boolean(isLoading)}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            borderRadius: 8,
-            backgroundColor: "#0052ce",
-          }}
+          activeOpacity={0.8}
         >
           {isLoading ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={{ fontSize: 12, color: "#fff", fontWeight: "700" }}>Chap nhan</Text>
+            <Text className="text-xs text-white font-bold">Chấp nhận</Text>
           )}
         </TouchableOpacity>
 
         <TouchableOpacity
+          className="px-3 py-2 rounded-lg border border-border bg-surface-secondary"
           onPress={() => onReject(item.id)}
           disabled={Boolean(isLoading)}
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: "#d1d5db",
-            backgroundColor: "#f9fafb",
-          }}
+          activeOpacity={0.8}
         >
-          <Text style={{ fontSize: 12, color: "#374151", fontWeight: "600" }}>Tu choi</Text>
+          <Text className="text-xs text-foreground font-semibold">Từ chối</Text>
         </TouchableOpacity>
       </View>
     </View>

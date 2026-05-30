@@ -625,6 +625,23 @@ export const api = {
       },
     ),
 
+  savePost: (postId: string | number) =>
+    request<{ saved: boolean }>(
+      `/api/social/posts/${encodeURIComponent(String(postId))}/save`,
+      { method: "POST" },
+    ),
+
+  unsavePost: (postId: string | number) =>
+    request<{ saved: boolean }>(
+      `/api/social/posts/${encodeURIComponent(String(postId))}/save`,
+      { method: "DELETE" },
+    ),
+
+  listSavedPosts: () =>
+    request<{ posts: any[] }>("/api/social/posts/saved").then((res) => ({
+      posts: (res.posts || []).map(mapFeedPost),
+    })),
+
   // Comments
   addComment: (
     postId: string | number,

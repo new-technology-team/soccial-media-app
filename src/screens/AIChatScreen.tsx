@@ -67,17 +67,11 @@ function TypingDots() {
   }, [dot1, dot2, dot3]);
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+    <View className="flex-row items-center gap-1">
       {[dot1, dot2, dot3].map((dot, i) => (
         <Animated.View
           key={i}
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            backgroundColor: "#6b7280",
-            opacity: dot,
-          }}
+          style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#6b7280", opacity: dot }}
         />
       ))}
     </View>
@@ -140,12 +134,10 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
     ]);
   }, []);
 
-  // Lấy lịch sử chat từ backend
   useEffect(() => {
     api
       .aiHistory()
       .then((res) => {
-        // Backend trả về array trực tiếp
         const rawHistory: any[] = Array.isArray(res)
           ? res
           : (res as any)?.messages || (res as any)?.history || [];
@@ -159,13 +151,10 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
           setMessages([WELCOME_MSG, ...mapped]);
         }
       })
-      .catch(() => {
-        // lịch sử không tải được — bỏ qua
-      })
+      .catch(() => { /* ignore */ })
       .finally(() => setIsLoadingHistory(false));
   }, []);
 
-  // Cuộn xuống cuối khi có tin mới
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -183,17 +172,15 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
       createdAt: new Date().toISOString(),
     };
 
-    // Tạo context history để gửi lên AI (bỏ welcome message)
     const historyForAI = messages
       .filter((m) => m.id !== "welcome")
-      .slice(-10) // giữ 10 tin gần nhất
+      .slice(-10)
       .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("model" as const), text: m.text }));
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsSending(true);
 
-    // Thêm placeholder "đang gõ"
     const typingId = `typing-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
@@ -209,7 +196,7 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => prev.filter((m) => m.id !== typingId).concat(aiMsg));
-    } catch (err) {
+    } catch {
       setMessages((prev) =>
         prev.filter((m) => m.id !== typingId).concat({
           id: `err-${Date.now()}`,
@@ -228,27 +215,9 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
     const isTyping = item.text === "__typing__";
 
     return (
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: isUser ? "flex-end" : "flex-start",
-          marginBottom: 10,
-          paddingHorizontal: 12,
-        }}
-      >
+      <View className={`flex-row mb-2.5 px-3 ${isUser ? "justify-end" : "justify-start"}`}>
         {!isUser && (
-          <View
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              backgroundColor: "#0052ce",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: 8,
-              alignSelf: "flex-end",
-            }}
-          >
+          <View className="w-8 h-8 rounded-full bg-primary items-center justify-center mr-2 self-end">
             <Text style={{ fontSize: 16 }}>🤖</Text>
           </View>
         )}
@@ -258,42 +227,23 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
             activeOpacity={0.85}
             onLongPress={!isUser && !isTyping ? () => handleLongPressAI(item) : undefined}
             delayLongPress={500}
-            style={{
-              backgroundColor: isUser ? "#0052ce" : "#f3f4f6",
-              borderRadius: 18,
-              borderBottomRightRadius: isUser ? 4 : 18,
-              borderBottomLeftRadius: isUser ? 18 : 4,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-              shadowColor: "#000",
-              shadowOpacity: 0.06,
-              shadowRadius: 3,
-              elevation: 1,
-            }}
+            className={`px-[14px] py-[10px] ${
+              isUser
+                ? "bg-primary rounded-[18px] rounded-br-[4px]"
+                : "bg-surface-secondary rounded-[18px] rounded-bl-[4px]"
+            }`}
+            style={{ shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 }}
           >
             {isTyping ? (
               <TypingDots />
             ) : (
-              <Text
-                style={{
-                  color: isUser ? "#ffffff" : "#111827",
-                  fontSize: 14,
-                  lineHeight: 20,
-                }}
-              >
+              <Text className={`text-sm leading-5 ${isUser ? "text-white" : "text-foreground"}`}>
                 {item.text}
               </Text>
             )}
           </TouchableOpacity>
           {!isTyping && (
-            <Text
-              style={{
-                fontSize: 10,
-                color: "#9ca3af",
-                marginTop: 3,
-                textAlign: isUser ? "right" : "left",
-              }}
-            >
+            <Text className={`text-[10px] text-muted-foreground mt-0.5 ${isUser ? "text-right" : "text-left"}`}>
               {formatTime(item.createdAt)}
             </Text>
           )}
@@ -304,27 +254,23 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#f9fafb" }}
+      className="flex-1 bg-background"
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={0}
     >
-      {/* Header */}
       <TopBar
         title="ZChat AI"
         leftAction={
           onExit
-            ? {
-              label: "Quay lai",
-              onPress: onExit,
-            }
+            ? { label: "Quay lại", onPress: onExit }
             : undefined
         }
         rightAction={
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View className="flex-row items-center gap-2">
             <TouchableOpacity
               onPress={() => { void handleSummarize(); }}
               disabled={isSending || messages.length <= 1}
-              style={{ padding: 4 }}
+              className="w-10 h-10 items-center justify-center"
               activeOpacity={0.7}
             >
               <Feather
@@ -333,15 +279,8 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
                 color={isSending || messages.length <= 1 ? "#d1d5db" : "#0052ce"}
               />
             </TouchableOpacity>
-            <View
-              style={{
-                backgroundColor: "#dcfce7",
-                borderRadius: 99,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ fontSize: 11, color: "#16a34a", fontWeight: "600" }}>● Online</Text>
+            <View className="bg-green-50 rounded-full px-2.5 py-1">
+              <Text className="text-[11px] text-success font-semibold">● Online</Text>
             </View>
           </View>
         }
@@ -349,11 +288,9 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
 
       {/* Gợi ý ban đầu */}
       {messages.length === 1 && !isLoadingHistory && (
-        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
-          <Text style={{ fontSize: 12, color: "#6b7280", marginBottom: 8, fontWeight: "600" }}>
-            Gợi ý câu hỏi:
-          </Text>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View className="px-4 pt-3 pb-1">
+          <Text className="text-xs text-muted-foreground mb-2 font-semibold">Gợi ý câu hỏi:</Text>
+          <View className="flex-row flex-wrap gap-2">
             {[
               "Hướng dẫn đăng bài viết",
               "Cách kết bạn?",
@@ -363,14 +300,9 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
               <TouchableOpacity
                 key={q}
                 onPress={() => setInput(q)}
-                style={{
-                  backgroundColor: "#e0e7ff",
-                  borderRadius: 99,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                }}
+                className="bg-indigo-100 rounded-full px-3 py-1.5"
               >
-                <Text style={{ fontSize: 12, color: "#4f46e5" }}>{q}</Text>
+                <Text className="text-xs text-indigo-600">{q}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -379,7 +311,7 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
 
       {/* Danh sách tin nhắn */}
       {isLoadingHistory ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0052ce" />
         </View>
       ) : (
@@ -396,30 +328,12 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
 
       {/* Input box */}
       <View
-        style={{
-          flexDirection: "row",
-          alignItems: "flex-end",
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          paddingBottom: Platform.OS === "android" ? 80 : 90,
-          backgroundColor: "#ffffff",
-          borderTopWidth: 1,
-          borderTopColor: "#e5e7eb",
-          gap: 8,
-        }}
+        className="flex-row items-end px-3 pt-2.5 bg-surface border-t border-border gap-2"
+        style={{ paddingBottom: Platform.OS === "android" ? 80 : 90 }}
       >
         <TextInput
-          style={{
-            flex: 1,
-            minHeight: 44,
-            maxHeight: 120,
-            backgroundColor: "#f3f4f6",
-            borderRadius: 22,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            fontSize: 14,
-            color: "#111827",
-          }}
+          className="flex-1 bg-surface-secondary rounded-[22px] px-4 py-2.5 text-sm text-foreground"
+          style={{ minHeight: 44, maxHeight: 120 }}
           placeholder="Nhắn tin với AI..."
           placeholderTextColor="#9ca3af"
           value={input}
@@ -432,14 +346,9 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
         <TouchableOpacity
           onPress={handleSend}
           disabled={!input.trim() || isSending}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            backgroundColor: !input.trim() || isSending ? "#d1d5db" : "#0052ce",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
+          className={`w-11 h-11 rounded-full items-center justify-center ${
+            !input.trim() || isSending ? "bg-border" : "bg-primary"
+          }`}
           activeOpacity={0.8}
         >
           {isSending ? (

@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { Buffer } from "buffer";
@@ -166,6 +167,8 @@ export function MessagesScreen({
   incomingCallBootstrap,
   onIncomingCallBootstrapHandled,
 }: MessagesScreenProps) {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 56 + Math.max(insets.bottom, 4);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -320,8 +323,8 @@ export function MessagesScreen({
     );
     const conversationName = String(
       matchedConversation?.name ||
-        normalizedPayload.fromUserName ||
-        "Cuoc goi video",
+      normalizedPayload.fromUserName ||
+      "Cuoc goi video",
     );
 
     setIncomingCall({ payload: normalizedPayload, conversationName });
@@ -470,15 +473,15 @@ export function MessagesScreen({
         prev.map((item) =>
           item.id === messageId
             ? {
-                ...item,
-                content: String(payload?.content ?? "Tin nhan da duoc thu hoi"),
-                type: payload?.type ? String(payload.type) : item.type,
-                mediaUrl: resolveChatMediaUrl(payload?.mediaUrl),
-                fileName: payload?.fileName ? String(payload.fileName) : "",
-                fileSize: Number(payload?.fileSize || 0),
-                meta: payload?.meta || null,
-                isRecalled: Boolean(payload?.isRecalled ?? true),
-              }
+              ...item,
+              content: String(payload?.content ?? "Tin nhan da duoc thu hoi"),
+              type: payload?.type ? String(payload.type) : item.type,
+              mediaUrl: resolveChatMediaUrl(payload?.mediaUrl),
+              fileName: payload?.fileName ? String(payload.fileName) : "",
+              fileSize: Number(payload?.fileSize || 0),
+              meta: payload?.meta || null,
+              isRecalled: Boolean(payload?.isRecalled ?? true),
+            }
             : item,
         ),
       );
@@ -1062,14 +1065,14 @@ export function MessagesScreen({
   );
   const directConversationBlocked = Boolean(
     !isGroupCallConversation &&
-      (activeConversation?.isBlockedByMe || activeConversation?.isBlockedMe),
+    (activeConversation?.isBlockedByMe || activeConversation?.isBlockedMe),
   );
   const canStartVideoCall = Boolean(
     selectedConv &&
-      !directConversationBlocked &&
-      !isOpeningCallRoom &&
-      !outgoingCall &&
-      !incomingCall,
+    !directConversationBlocked &&
+    !isOpeningCallRoom &&
+    !outgoingCall &&
+    !incomingCall,
   );
 
   const emitCallEnd = useCallback(
@@ -1215,7 +1218,7 @@ export function MessagesScreen({
         reason: "timeout",
       });
       setOutgoingCall(null);
-      Alert.alert("Khong co phan hoi", "Nguoi nhan chua tra loi cuoc goi.");
+      Alert.alert("Không có phản hồi", "Người nhận chưa trả lời cuộc gọi.");
     }, 25000);
 
     return () => clearTimeout(timer);
@@ -1539,11 +1542,10 @@ export function MessagesScreen({
           ) : (
             <View className="flex-row items-center">
               <TouchableOpacity
-                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${
-                  canStartVideoCall
-                    ? "bg-primary border-primary"
-                    : "bg-surface-secondary border-border"
-                }`}
+                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${canStartVideoCall
+                  ? "bg-primary border-primary"
+                  : "bg-surface-secondary border-border"
+                  }`}
                 onPress={() => {
                   void handleStartVideoCall();
                 }}
@@ -1654,53 +1656,46 @@ export function MessagesScreen({
             }}
             contentContainerStyle={{
               paddingVertical: 12,
-              paddingBottom: 8,
+              paddingBottom: 12,
             }}
           />
-          {aiSuggestions.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ paddingHorizontal: 12, paddingVertical: 6, flexGrow: 0 }}
-              keyboardShouldPersistTaps="always"
-            >
-              {aiSuggestions.map((s, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => { setMessageText(s); setAiSuggestions([]); }}
-                  style={{
-                    backgroundColor: "#e0e7ff",
-                    borderRadius: 99,
-                    paddingHorizontal: 12,
-                    paddingVertical: 7,
-                    marginRight: 8,
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={{ fontSize: 12, color: "#4f46e5" }}>{s}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                onPress={() => setAiSuggestions([])}
-                style={{ padding: 7 }}
-                activeOpacity={0.7}
-              >
-                <Feather name="x" size={14} color="#9ca3af" />
-              </TouchableOpacity>
-            </ScrollView>
-          )}
           <View
             style={{
-              marginBottom:
-                Platform.OS === "ios"
-                  ? isKeyboardVisible
-                    ? 8
-                    : 82
-                  : isKeyboardVisible
-                    ? 8
-                    : 70,
+              marginBottom: isKeyboardVisible ? 8 : tabBarHeight,
             }}
           >
+            {aiSuggestions.length > 0 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ paddingHorizontal: 12, paddingVertical: 8, flexGrow: 0 }}
+                keyboardShouldPersistTaps="always"
+              >
+                {aiSuggestions.map((s, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => { setMessageText(s); setAiSuggestions([]); }}
+                    style={{
+                      backgroundColor: "#e0e7ff",
+                      borderRadius: 99,
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      marginRight: 8,
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={{ fontSize: 12, color: "#4f46e5" }}>{s}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  onPress={() => setAiSuggestions([])}
+                  style={{ padding: 7 }}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="x" size={14} color="#9ca3af" />
+                </TouchableOpacity>
+              </ScrollView>
+            )}
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <TouchableOpacity
                 onPress={() => { void handleGetSuggestions(); }}
@@ -1727,16 +1722,16 @@ export function MessagesScreen({
                   }}
                   disabled={Boolean(
                     !activeConversation?.isGroup &&
-                      (activeConversation?.isBlockedByMe ||
-                        activeConversation?.isBlockedMe),
+                    (activeConversation?.isBlockedByMe ||
+                      activeConversation?.isBlockedMe),
                   )}
                   disableAttachments={isUploadingAttachment}
                   placeholder={
                     !activeConversation?.isGroup &&
-                    activeConversation?.isBlockedByMe
+                      activeConversation?.isBlockedByMe
                       ? "Ban dang chan nguoi nay"
                       : !activeConversation?.isGroup &&
-                          activeConversation?.isBlockedMe
+                        activeConversation?.isBlockedMe
                         ? "Ban da bi chan tin nhan"
                         : isUploadingAttachment
                           ? "Dang tai tep..."
@@ -1888,11 +1883,10 @@ export function MessagesScreen({
                 <Text className="text-sm font-semibold text-muted-foreground">Huy</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                className={`flex-1 h-11 rounded-xl items-center justify-center ml-2 ${
-                  isMutatingConversation || !renameGroupInput.trim()
-                    ? "bg-primary/50"
-                    : "bg-primary"
-                }`}
+                className={`flex-1 h-11 rounded-xl items-center justify-center ml-2 ${isMutatingConversation || !renameGroupInput.trim()
+                  ? "bg-primary/50"
+                  : "bg-primary"
+                  }`}
                 onPress={() => { void handleRenameGroup(); }}
                 disabled={isMutatingConversation || !renameGroupInput.trim()}
                 activeOpacity={0.85}
@@ -2207,11 +2201,10 @@ export function MessagesScreen({
 
             {!activeConversation?.isGroup && peerUserId ? (
               <TouchableOpacity
-                className={`h-12 rounded-xl border px-4 mb-2 flex-row items-center ${
-                  activeConversation?.isBlockedByMe
-                    ? "border-border bg-surface-secondary"
-                    : "border-red-200 bg-red-50"
-                }`}
+                className={`h-12 rounded-xl border px-4 mb-2 flex-row items-center ${activeConversation?.isBlockedByMe
+                  ? "border-border bg-surface-secondary"
+                  : "border-red-200 bg-red-50"
+                  }`}
                 onPress={() => {
                   void handleToggleBlockPeer();
                 }}
@@ -2224,11 +2217,10 @@ export function MessagesScreen({
                   color={activeConversation?.isBlockedByMe ? "#111827" : "#dc2626"}
                 />
                 <Text
-                  className={`ml-3 text-sm font-medium ${
-                    activeConversation?.isBlockedByMe
-                      ? "text-foreground"
-                      : "text-danger"
-                  }`}
+                  className={`ml-3 text-sm font-medium ${activeConversation?.isBlockedByMe
+                    ? "text-foreground"
+                    : "text-danger"
+                    }`}
                 >
                   {activeConversation?.isBlockedByMe ? "Bo chan tin nhan" : "Chan tin nhan"}
                 </Text>
@@ -2334,7 +2326,7 @@ export function MessagesScreen({
               ListEmptyComponent={
                 <View className="py-6 items-center">
                   <Text className="text-sm text-muted-foreground">
-                    Khong co thanh vien de hien thi
+                    Không có thành viên để hiển thị
                   </Text>
                 </View>
               }

@@ -25,6 +25,7 @@ interface FeedScreenProps {
   user: AuthUser;
   onLogout: () => void;
   onOpenAIChat?: () => void;
+  onOpenNotifications?: () => void;
   focusPostId?: string | null;
   openCommentsPostId?: string | null;
   onRouteConsumed?: () => void;
@@ -40,6 +41,7 @@ export function FeedScreen({
   user,
   onLogout,
   onOpenAIChat,
+  onOpenNotifications,
   focusPostId,
   openCommentsPostId,
   onRouteConsumed,
@@ -62,6 +64,7 @@ export function FeedScreen({
     null,
   );
 
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const [sharePost, setSharePost] = useState<FeedPost | null>(null);
   const [shareNote, setShareNote] = useState("");
   const [shareFriends, setShareFriends] = useState<ShareFriend[]>([]);
@@ -90,6 +93,27 @@ export function FeedScreen({
   useEffect(() => {
     void loadFeed();
   }, [loadFeed]);
+
+  useEffect(() => {
+    api.listSavedPosts()
+      .then((res) => setSavedPostIds(new Set((res.posts || []).map((p) => String(p.id)))))
+      .catch(() => undefined);
+  }, []);
+
+  const handleSave = async (post: FeedPost) => {
+    const isSaved = savedPostIds.has(String(post.id));
+    try {
+      if (isSaved) {
+        await api.unsavePost(post.id);
+        setSavedPostIds((prev) => { const next = new Set(prev); next.delete(String(post.id)); return next; });
+      } else {
+        await api.savePost(post.id);
+        setSavedPostIds((prev) => new Set([...prev, String(post.id)]));
+      }
+    } catch {
+      /* silent */
+    }
+  };
 
   useEffect(() => {
     if (previousAvatarRef.current === user.avatarUrl) return;
@@ -173,6 +197,17 @@ export function FeedScreen({
         const res = await api.reactPost(post.id, "like");
         setPosts((prev) => prev.map((p) => (p.id === post.id ? res.post : p)));
       }
+    } catch {
+      /* silent */
+    }
+  };
+
+  const handleReact = async (post: FeedPost, type: string) => {
+    try {
+      const res = post.viewerReaction === type
+        ? await api.unreactPost(post.id)
+        : await api.reactPost(post.id, type);
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? res.post : p)));
     } catch {
       /* silent */
     }
@@ -375,20 +410,25 @@ export function FeedScreen({
       <TopBar
         title="ZChat"
         rightAction={
-          <View className="flex-row items-center">
-            <TouchableOpacity
-              className="w-8 h-8 rounded-full bg-blue-50 items-center justify-center mr-2"
-              onPress={onOpenAIChat}
-              activeOpacity={0.8}
-            >
-              <Feather name="cpu" size={14} color="#0052ce" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="px-3 py-1.5 rounded-full bg-red-50"
-              onPress={onLogout}
-            >
-              <Text className="text-danger font-semibold text-xs">Thoat</Text>
-            </TouchableOpacity>
+          <View className="flex-row items-center gap-2">
+            {onOpenNotifications && (
+              <TouchableOpacity
+                className="w-10 h-10 rounded-full bg-surface-secondary border border-border items-center justify-center"
+                onPress={onOpenNotifications}
+                activeOpacity={0.8}
+              >
+                <Feather name="bell" size={16} color="#0052ce" />
+              </TouchableOpacity>
+            )}
+            {onOpenAIChat && (
+              <TouchableOpacity
+                className="w-10 h-10 rounded-full bg-surface-secondary border border-border items-center justify-center"
+                onPress={onOpenAIChat}
+                activeOpacity={0.8}
+              >
+                <Feather name="cpu" size={16} color="#0052ce" />
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -400,11 +440,12 @@ export function FeedScreen({
           <PostCard
             post={item}
             currentUserId={user.id}
-            onLike={() => handleLike(item)}
+            isSaved={savedPostIds.has(String(item.id))}
+            onLike={() => { void handleLike(item); }}
+            onReact={(type) => { void handleReact(item, type); }}
             onComment={() => handleComment(item)}
-            onShare={() => {
-              void openShareModal(item);
-            }}
+            onShare={() => { void openShareModal(item); }}
+            onSave={() => { void handleSave(item); }}
             onMenu={() => handleOpenPostMenu(item)}
             onHashtagPress={onHashtagPress}
           />

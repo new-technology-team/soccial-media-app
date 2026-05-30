@@ -12,6 +12,8 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TopBar } from "../common/TopBar";
 import { EmptyState } from "../common/EmptyState";
 import { Avatar } from "../common/Avatar";
@@ -51,6 +53,8 @@ export function PostCommentsScreen({
   onBack,
   onCommentAdded,
 }: PostCommentsScreenProps) {
+  const insets = useSafeAreaInsets();
+  const inputBottomOffset = Math.max(insets.bottom, 4);
   const [comments, setComments] = useState<FeedComment[]>([]);
   const [postPreview, setPostPreview] = useState<FeedPost | null>(post || null);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,10 +124,10 @@ export function PostCommentsScreen({
   };
 
   const handleDeleteComment = async (comment: FeedComment) => {
-    Alert.alert("Xoa binh luan", "Ban chac chan muon xoa binh luan nay?", [
-      { text: "Huy", style: "cancel" },
+    Alert.alert("Xóa bình luận", "Bạn chắc chắn muốn xóa bình luận này?", [
+      { text: "Hủy", style: "cancel" },
       {
-        text: "Xoa",
+        text: "Xóa",
         style: "destructive",
         onPress: async () => {
           try {
@@ -205,10 +209,11 @@ export function PostCommentsScreen({
               {myComment ? (
                 <TouchableOpacity
                   onPress={() => { void handleDeleteComment(item); }}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  className="w-7 h-7 items-center justify-center rounded-full"
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   activeOpacity={0.7}
                 >
-                  <Text className="text-muted-foreground text-xs">✕</Text>
+                  <Feather name="x" size={14} color="#6b7280" />
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -288,7 +293,7 @@ export function PostCommentsScreen({
           keyExtractor={(item) => String(item.id)}
           className="flex-1"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -357,7 +362,7 @@ export function PostCommentsScreen({
 
         <View
           className="px-4 py-3 border-t border-border bg-surface"
-          style={{ marginBottom: 70 }}
+          style={{ paddingBottom: inputBottomOffset + 12 }}
         >
           {replyTo ? (
             <View className="mb-2 flex-row items-center justify-between rounded-xl border border-border bg-surface-secondary px-3 py-2">

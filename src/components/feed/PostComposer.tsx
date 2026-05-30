@@ -17,6 +17,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { Avatar } from "../common/Avatar";
 import { api } from "../../lib/api";
+import { colors } from "../../utils/theme";
 
 interface PostComposerProps {
   visible: boolean;
@@ -262,7 +263,7 @@ export function PostComposer({
                   </Text>
                 </TouchableOpacity>
                 {isUploadingMedia ? (
-                  <ActivityIndicator className="ml-3" color="#0052ce" />
+                  <ActivityIndicator className="ml-3" color={colors.primary} />
                 ) : null}
               </View>
 

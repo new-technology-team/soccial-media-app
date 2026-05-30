@@ -5,6 +5,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import "./src/global.css";
 import { AuthScreen } from "./src/screens/AuthScreen";
 import { FeedScreen } from "./src/screens/FeedScreen";
@@ -194,6 +195,7 @@ export default function App() {
             user={user}
             onLogout={handleLogout}
             onOpenAIChat={() => openAIChat("feed")}
+            onOpenNotifications={() => handleTabChange("notifications")}
             focusPostId={feedFocusPostId}
             openCommentsPostId={feedOpenCommentsPostId}
             onRouteConsumed={handleFeedRouteConsumed}
@@ -294,17 +296,19 @@ export default function App() {
   const hideNavigator = activeTab === "ai-chat";
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View className="flex-1 bg-background">
-        <StatusBar />
-        {renderScreen()}
-        {!hideNavigator ? (
-          <AppNavigator
-            activeTab={activeTab === "profile-settings" ? "profile" : activeTab}
-            onTabChange={handleTabChange}
-          />
-        ) : null}
-      </View>
-    </TouchableWithoutFeedback>
+    <SafeAreaProvider>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View className="flex-1 bg-background">
+          <StatusBar />
+          {renderScreen()}
+          {!hideNavigator ? (
+            <AppNavigator
+              activeTab={activeTab === "profile-settings" ? "profile" : activeTab}
+              onTabChange={handleTabChange}
+            />
+          ) : null}
+        </View>
+      </TouchableWithoutFeedback>
+    </SafeAreaProvider>
   );
 }

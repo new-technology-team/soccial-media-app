@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface TopBarProps {
   title: string;
@@ -12,11 +13,20 @@ interface TopBarProps {
 }
 
 export function TopBar({ title, leftAction, rightAction, safeArea = true }: TopBarProps) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <View className={`bg-surface border-b border-border ${safeArea ? 'pt-10' : ''}`}>
+    <View
+      className="bg-surface border-b border-border"
+      style={safeArea ? { paddingTop: insets.top } : undefined}
+    >
       <View className="h-14 flex-row items-center px-4">
         {leftAction ? (
-          <TouchableOpacity onPress={leftAction.onPress} className="pr-4">
+          <TouchableOpacity
+            onPress={leftAction.onPress}
+            className="h-10 justify-center pr-3"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text className="text-primary font-semibold text-sm">{leftAction.label}</Text>
           </TouchableOpacity>
         ) : (
@@ -28,4 +38,3 @@ export function TopBar({ title, leftAction, rightAction, safeArea = true }: TopB
     </View>
   );
 }
-

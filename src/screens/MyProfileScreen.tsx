@@ -14,7 +14,7 @@ interface MyProfileScreenProps {
   onOpenPost?: (postId: string, options?: { openComments?: boolean }) => void;
 }
 
-type ProfileTab = "posts" | "shares";
+type ProfileTab = "posts" | "shares" | "saved";
 
 const SHARE_PREFIX = "Chia se bai viet cua ";
 
@@ -37,6 +37,8 @@ export function MyProfileScreen({
   const [activeTab, setActiveTab] = useState<ProfileTab>("posts");
   const [isLoading, setIsLoading] = useState(true);
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [savedPosts, setSavedPosts] = useState<FeedPost[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false);
   const [status, setStatus] = useState("");
 
   const loadPosts = useCallback(async () => {
@@ -46,15 +48,33 @@ export function MyProfileScreen({
       const res = await api.listUserPosts(user.id);
       setPosts(res.posts || []);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Khong the tai ho so");
+      setStatus(err instanceof Error ? err.message : "Không thể tải hồ sơ");
     } finally {
       setIsLoading(false);
     }
   }, [user.id]);
 
+  const loadSavedPosts = useCallback(async () => {
+    setIsLoadingSaved(true);
+    try {
+      const res = await api.listSavedPosts();
+      setSavedPosts(res.posts || []);
+    } catch {
+      /* silent */
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadPosts();
   }, [loadPosts]);
+
+  useEffect(() => {
+    if (activeTab === "saved") {
+      void loadSavedPosts();
+    }
+  }, [activeTab, loadSavedPosts]);
 
   const ownPosts = useMemo(
     () => posts.filter((post) => !isSharedPost(post)),
@@ -65,15 +85,22 @@ export function MyProfileScreen({
     [posts],
   );
 
-  const data = activeTab === "posts" ? ownPosts : sharedPosts;
+  const data = activeTab === "posts" ? ownPosts : activeTab === "shares" ? sharedPosts : savedPosts;
+  const loading = activeTab === "saved" ? isLoadingSaved : isLoading;
+
+  const TABS: { key: ProfileTab; label: string; icon: string }[] = [
+    { key: "posts",  label: "Bài viết",  icon: "file-text" },
+    { key: "shares", label: "Chia sẻ",   icon: "share-2" },
+    { key: "saved",  label: "Đã lưu",    icon: "bookmark" },
+  ];
 
   return (
     <View className="flex-1 bg-background">
       <TopBar
-        title="Ho so"
+        title="Hồ sơ"
         rightAction={
           <TouchableOpacity
-            className="w-10 h-10 items-end justify-center"
+            className="w-10 h-10 items-center justify-center"
             activeOpacity={0.75}
             onPress={onOpenSettings}
           >
@@ -99,40 +126,41 @@ export function MyProfileScreen({
                   {user.fullName}
                 </Text>
                 <Text className="text-xs text-muted-foreground">
-                  {user.email || user.phone || "Tai khoan ZChat"}
+                  {user.email || user.phone || "Tài khoản ZChat"}
                 </Text>
-                <View className="flex-row items-center mt-3">
-                  <Text className="text-xs text-muted-foreground mr-4">
-                    Bai viet: {ownPosts.length}
+                <View className="flex-row items-center mt-3 gap-4">
+                  <Text className="text-xs text-muted-foreground">
+                    Bài viết: {ownPosts.length}
                   </Text>
                   <Text className="text-xs text-muted-foreground">
-                    Da chia se: {sharedPosts.length}
+                    Chia sẻ: {sharedPosts.length}
+                  </Text>
+                  <Text className="text-xs text-muted-foreground">
+                    Đã lưu: {savedPosts.length}
                   </Text>
                 </View>
               </View>
             </Card>
 
             <View className="rounded-2xl bg-surface border border-border p-1 flex-row mb-3">
-              <TouchableOpacity
-                className={`flex-1 h-10 rounded-xl items-center justify-center ${activeTab === "posts" ? "bg-primary" : "bg-transparent"}`}
-                onPress={() => setActiveTab("posts")}
-              >
-                <Text
-                  className={`text-sm font-semibold ${activeTab === "posts" ? "text-white" : "text-muted-foreground"}`}
+              {TABS.map((tab) => (
+                <TouchableOpacity
+                  key={tab.key}
+                  className={`flex-1 h-10 rounded-xl items-center justify-center flex-row gap-1 ${activeTab === tab.key ? "bg-primary" : "bg-transparent"}`}
+                  onPress={() => setActiveTab(tab.key)}
                 >
-                  Bai viet
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className={`flex-1 h-10 rounded-xl items-center justify-center ${activeTab === "shares" ? "bg-primary" : "bg-transparent"}`}
-                onPress={() => setActiveTab("shares")}
-              >
-                <Text
-                  className={`text-sm font-semibold ${activeTab === "shares" ? "text-white" : "text-muted-foreground"}`}
-                >
-                  Da chia se
-                </Text>
-              </TouchableOpacity>
+                  <Feather
+                    name={tab.icon as any}
+                    size={12}
+                    color={activeTab === tab.key ? "#ffffff" : "#6b7280"}
+                  />
+                  <Text
+                    className={`text-xs font-semibold ${activeTab === tab.key ? "text-white" : "text-muted-foreground"}`}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {status ? (
@@ -146,32 +174,39 @@ export function MyProfileScreen({
           <TouchableOpacity
             className="mb-3 rounded-2xl bg-surface border border-border px-4 py-3"
             activeOpacity={0.8}
-            onPress={() => onOpenPost?.(item.id, { openComments: true })}
+            onPress={() => onOpenPost?.(item.id)}
           >
-            <Text className="text-xs text-primary font-semibold mb-1">
-              {new Date(item.createdAt).toLocaleDateString()} •{" "}
-              {item.visibility === "private" ? "Rieng tu" : "Cong khai"}
-            </Text>
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-xs text-primary font-semibold">
+                {new Date(item.createdAt).toLocaleDateString("vi-VN")} ·{" "}
+                {item.visibility === "private" ? "Riêng tư" : "Công khai"}
+              </Text>
+              <Feather name="chevron-right" size={14} color="#6b7280" />
+            </View>
             <Text className="text-sm text-foreground" numberOfLines={4}>
               {activeTab === "shares"
-                ? normalizeSharedContent(item) || "Bai viet chia se"
-                : item.content || "Bai viet co media"}
+                ? normalizeSharedContent(item) || "Bài viết chia sẻ"
+                : item.content || "Bài viết có media"}
             </Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          !isLoading ? (
+          !loading ? (
             <EmptyState
-              icon={activeTab === "shares" ? "🔁" : "📝"}
+              icon={activeTab === "shares" ? "🔁" : activeTab === "saved" ? "🔖" : "📝"}
               title={
                 activeTab === "shares"
-                  ? "Chua co bai viet chia se"
-                  : "Chua co bai viet nao"
+                  ? "Chưa có bài viết chia sẻ"
+                  : activeTab === "saved"
+                    ? "Chưa có bài viết đã lưu"
+                    : "Chưa có bài viết nào"
               }
               subtitle={
                 activeTab === "shares"
-                  ? "Hay chia se bai viet de hien thi o day."
-                  : "Hay dang bai de bat dau ho so ca nhan."
+                  ? "Hãy chia sẻ bài viết để hiển thị ở đây."
+                  : activeTab === "saved"
+                    ? "Lưu bài viết từ bảng tin để xem lại sau."
+                    : "Hãy đăng bài để bắt đầu hồ sơ cá nhân."
               }
             />
           ) : (

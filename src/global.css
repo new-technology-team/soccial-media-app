@@ -8,16 +8,16 @@
 @source "./**/*.{ts,tsx}";
 
 @theme {
-  --color-primary: #0052cc;
+  --color-primary: #0052ce;
   --color-primary-light: #789dff;
   --color-primary-dark: #003d9a;
-  --color-background: #f3f5f8;
-  --color-foreground: #2c2f30;
+  --color-background: #f4f6f8;
+  --color-foreground: #1f2733;
   --color-surface: #ffffff;
-  --color-surface-secondary: #e8edef;
-  --color-muted: #e8edef;
-  --color-muted-foreground: #595c5d;
-  --color-border: #c2ced4;
+  --color-surface-secondary: #eef1f3;
+  --color-muted: #eef1f3;
+  --color-muted-foreground: #58606e;
+  --color-border: #dbe0e6;
   --color-input: #ffffff;
   --color-danger: #dc2626;
   --color-success: #16a34a;

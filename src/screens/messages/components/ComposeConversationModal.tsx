@@ -93,8 +93,8 @@ export function ComposeConversationModal({
               <View className="py-8">
                 <EmptyState
                   icon="👥"
-                  title="Khong co ban be phu hop"
-                  subtitle="Can it nhat 2 ban be de tao nhom 3 nguoi"
+                  title="Không có bạn bè phù hợp"
+                  subtitle="Cần ít nhất 2 bạn bè để tạo nhóm 3 người"
                 />
               </View>
             }

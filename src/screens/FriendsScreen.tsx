@@ -119,8 +119,8 @@ export function FriendsScreen({
             <FriendsListPlaceholder
               loading={isLoadingPending}
               icon="📬"
-              title="Khong co loi moi nao"
-              subtitle="Khi co nguoi gui loi moi ket ban, chung se hien thi o day."
+              title="Không có lời mời nào"
+              subtitle="Khi có người gửi lời mời kết bạn, chúng sẽ hiện thị ở đây."
             />
           }
           contentContainerStyle={{ paddingBottom: 100 }}
@@ -147,8 +147,8 @@ export function FriendsScreen({
                 title={searchKeyword.length >= 2 ? "Khong tim thay nguoi dung" : "Tim kiem ban be"}
                 subtitle={
                   searchKeyword.length >= 2
-                    ? "Thu lai voi tu khoa khac"
-                    : "Nhap it nhat 2 ky tu de tim ban"
+                    ? "Thử lại với từ khóa khác"
+                    : "Nhập ít nhất 2 ký tự để tìm kiếm"
                 }
               />
             ) : null

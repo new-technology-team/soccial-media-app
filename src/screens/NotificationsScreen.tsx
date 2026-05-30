@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, TouchableOpacity, View, FlatList, RefreshControl, Text } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { TopBar } from "../components/common/TopBar";
 import { EmptyState } from "../components/common/EmptyState";
 import { NotificationItem } from "../components/notifications/NotificationItem";
@@ -120,6 +121,7 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
       <FlatList
         data={notifications}
         keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={{ paddingBottom: 100 }}
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => { void handlePressNotification(item); }}
@@ -134,12 +136,11 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
                 />
               </View>
               <TouchableOpacity
-                className="w-8 h-8 items-center justify-center ml-1"
+                className="w-10 h-10 items-center justify-center ml-1 rounded-full"
                 onPress={() => handleDeleteNotification(item)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 activeOpacity={0.7}
               >
-                <Text className="text-muted-foreground text-base">✕</Text>
+                <Feather name="x" size={16} color="#6b7280" />
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
