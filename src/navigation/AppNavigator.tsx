@@ -9,7 +9,7 @@ interface Tab {
   icon: React.ComponentProps<typeof Feather>["name"];
 }
 
-const TABS: Tab[] = [
+const BASE_TABS: Tab[] = [
   { key: "feed",     label: "Bảng tin", icon: "activity" },
   { key: "search",   label: "Khám phá", icon: "compass" },
   { key: "messages", label: "Tin nhắn", icon: "message-circle" },
@@ -20,19 +20,35 @@ const TABS: Tab[] = [
 interface AppNavigatorProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  userRole?: string;
 }
 
-export function AppNavigator({ activeTab, onTabChange }: AppNavigatorProps) {
+export function AppNavigator({ activeTab, onTabChange, userRole }: AppNavigatorProps) {
   const insets = useSafeAreaInsets();
+
+  const tabs: Tab[] = [...BASE_TABS];
+  if (userRole === "admin") {
+    tabs.push({ key: "admin", label: "Quản trị", icon: "shield" });
+  } else if (userRole === "moderator") {
+    tabs.push({ key: "mod", label: "Kiểm duyệt", icon: "shield" });
+  }
+
+  const hasExtra = tabs.length > 5;
+  const iconSize = hasExtra ? 20 : 22;
+  const labelSize = hasExtra ? "text-[9px]" : "text-[10px]";
 
   return (
     <View
       className="absolute bottom-0 left-0 right-0 bg-surface border-t border-border flex-row items-center"
       style={{ paddingTop: 8, paddingBottom: Math.max(insets.bottom, 4) }}
     >
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
-        const color = isActive ? "#0052ce" : "#6b7280";
+        const isSpecial = tab.key === "admin" || tab.key === "mod";
+        const activeColor = isSpecial
+          ? (tab.key === "admin" ? "#0052ce" : "#16a34a")
+          : "#0052ce";
+        const color = isActive ? activeColor : "#6b7280";
         return (
           <TouchableOpacity
             key={tab.key}
@@ -40,10 +56,14 @@ export function AppNavigator({ activeTab, onTabChange }: AppNavigatorProps) {
             onPress={() => onTabChange(tab.key)}
             activeOpacity={0.7}
           >
-            <Feather name={tab.icon} size={22} color={color} />
-            <View className="w-4 h-0.5 rounded-full mt-0.5" style={{ backgroundColor: isActive ? "#0052ce" : "transparent" }} />
+            <Feather name={tab.icon} size={iconSize} color={color} />
+            <View
+              className="w-4 h-0.5 rounded-full mt-0.5"
+              style={{ backgroundColor: isActive ? activeColor : "transparent" }}
+            />
             <Text
-              className={`text-[10px] font-semibold mt-0.5 ${isActive ? "text-primary" : "text-muted-foreground"}`}
+              className={`${labelSize} font-semibold mt-0.5`}
+              style={{ color: isActive ? activeColor : "#6b7280" }}
             >
               {tab.label}
             </Text>

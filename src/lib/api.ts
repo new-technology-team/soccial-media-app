@@ -1157,4 +1157,120 @@ export const api = {
         method: "DELETE",
       },
     ),
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+  adminDashboard: () =>
+    request<{ stats: Record<string, number>; recentReports: any[] }>(
+      "/api/admin/dashboard",
+      { method: "GET" },
+    ),
+
+  adminReports: (status?: string) => {
+    const suffix =
+      status && status !== "all"
+        ? `?status=${encodeURIComponent(status)}`
+        : "";
+    return request<{ reports: any[] }>(`/api/admin/reports${suffix}`, {
+      method: "GET",
+    });
+  },
+
+  adminPosts: (params?: { q?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.q) q.set("q", params.q);
+    if (params?.status) q.set("status", params.status);
+    const suffix = q.toString() ? `?${q.toString()}` : "";
+    return request<{ posts: any[] }>(`/api/social/admin/posts${suffix}`, {
+      method: "GET",
+    });
+  },
+
+  updateAdminPost: (
+    postId: number,
+    payload: { status?: string; visibility?: string },
+  ) =>
+    request<{ message: string }>(`/api/social/admin/posts/${postId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteAdminPost: (postId: number) =>
+    request<{ message: string }>(`/api/social/admin/posts/${postId}`, {
+      method: "DELETE",
+    }),
+
+  adminModerationUsers: () =>
+    request<{ users: any[] }>("/api/moderator/users", { method: "GET" }),
+
+  updateModerationUser: (
+    userId: number,
+    payload: { accountStatus?: string; reason?: string },
+  ) =>
+    request<{ message: string }>(`/api/social/admin/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteAdminUser: (userId: number) =>
+    request<{ message: string }>(`/api/admin/users/${userId}`, {
+      method: "DELETE",
+    }),
+
+  // ── Moderator ──────────────────────────────────────────────────────────────
+  moderationDashboard: () =>
+    request<{ stats: Record<string, number>; reports: any[] }>(
+      "/api/moderator/dashboard",
+      { method: "GET" },
+    ),
+
+  moderationReports: (status?: string) => {
+    const suffix =
+      status && status !== "all"
+        ? `?status=${encodeURIComponent(status)}`
+        : "";
+    return request<{ reports: any[] }>(`/api/moderator/reports${suffix}`, {
+      method: "GET",
+    });
+  },
+
+  reviewModerationReport: (
+    reportId: number,
+    payload: { status: string; resolution?: string },
+  ) =>
+    request<{ message: string }>(
+      `/api/moderator/reports/${reportId}/status`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  moderatePost: (
+    postId: number,
+    payload: { status?: string; action?: string; resolution?: string },
+  ) =>
+    request<{ message: string }>(
+      `/api/social/moderation/posts/${postId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
+
+  warnModerationUser: (userId: number, reason?: string) =>
+    request<{ message: string }>(`/api/moderator/users/${userId}/warn`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason }),
+    }),
+
+  restrictModerationUser: (userId: number, reason?: string) =>
+    request<{ message: string }>(`/api/moderator/users/${userId}/restrict`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason }),
+    }),
+
+  tempLockModerationUser: (userId: number, reason?: string) =>
+    request<{ message: string }>(`/api/moderator/users/${userId}/temp-lock`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason }),
+    }),
+
+  restoreModerationUser: (userId: number) =>
+    request<{ message: string }>(`/api/moderator/users/${userId}/restore`, {
+      method: "PATCH",
+    }),
 };

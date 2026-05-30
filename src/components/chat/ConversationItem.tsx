@@ -7,9 +7,11 @@ import { formatTime } from '../../utils';
 interface ConversationItemProps {
   conversation: Conversation;
   onPress: () => void;
+  displayName?: string;
 }
 
-export function ConversationItem({ conversation, onPress }: ConversationItemProps) {
+export function ConversationItem({ conversation, onPress, displayName }: ConversationItemProps) {
+  const name = displayName ?? conversation.name ?? 'Cuộc trò chuyện';
   return (
     <TouchableOpacity
       className="flex-row items-center px-4 py-4 bg-surface border-b border-border"
@@ -17,14 +19,14 @@ export function ConversationItem({ conversation, onPress }: ConversationItemProp
       activeOpacity={0.7}
     >
       <Avatar
-        name={conversation.name || 'G'}
+        name={name || 'G'}
         avatarUrl={conversation.avatarUrl}
         size="md"
       />
       <View className="flex-1 ml-3">
         <View className="flex-row justify-between">
           <Text className="text-foreground font-semibold text-sm">
-            {conversation.name || 'Cuộc trò chuyện'}
+            {name}
           </Text>
           {conversation.lastMessageAt && (
             <Text className="text-muted-foreground text-xs">{formatTime(conversation.lastMessageAt)}</Text>

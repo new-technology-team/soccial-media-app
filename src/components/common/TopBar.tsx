@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface TopBarProps {
   title: string;
+  subtitle?: string;
   leftAction?: {
     label: string;
     onPress: () => void;
@@ -12,7 +13,7 @@ interface TopBarProps {
   safeArea?: boolean;
 }
 
-export function TopBar({ title, leftAction, rightAction, safeArea = true }: TopBarProps) {
+export function TopBar({ title, subtitle, leftAction, rightAction, safeArea = true }: TopBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -32,7 +33,12 @@ export function TopBar({ title, leftAction, rightAction, safeArea = true }: TopB
         ) : (
           <View className="w-10" />
         )}
-        <Text className="flex-1 text-base font-bold text-foreground text-center">{title}</Text>
+        <View className="flex-1 items-center">
+          <Text className="text-base font-bold text-foreground text-center">{title}</Text>
+          {subtitle ? (
+            <Text className="text-[11px] text-muted-foreground text-center">{subtitle}</Text>
+          ) : null}
+        </View>
         {rightAction ? rightAction : <View className="w-10" />}
       </View>
     </View>

@@ -130,6 +130,26 @@ function resolveVideoCallUrl(roomId: string): string {
   return `${base}/${encodeURIComponent(roomId)}`;
 }
 
+function resolveConvDisplayName(
+  conv: Conversation | null | undefined,
+  currentUserId: number,
+): string {
+  if (!conv) return "Tin nhắn";
+  if (conv.isGroup) return conv.name || "Nhóm chat";
+
+  const peer = (conv.members || []).find(
+    (m) => Number(m.userId) !== Number(currentUserId),
+  );
+  if (peer?.fullName) return peer.fullName;
+
+  const peerP = (conv.participants || []).find(
+    (p) => Number(p.userId) !== Number(currentUserId),
+  );
+  if (peerP?.name) return peerP.name;
+
+  return conv.name || "Cuộc trò chuyện";
+}
+
 function resolveDirectPeerUserId(
   conversation: Conversation | null | undefined,
   currentUserId: number,
@@ -189,6 +209,9 @@ export function MessagesScreen({
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
   const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [peerIsTyping, setPeerIsTyping] = useState(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameGroupInput, setRenameGroupInput] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -574,12 +597,28 @@ export function MessagesScreen({
       }
     };
 
+    const onTypingStart = (payload: any) => {
+      if (
+        Number(payload?.userId) !== Number(user.id) &&
+        String(payload?.conversationId) === String(activeConversationIdRef.current)
+      ) {
+        setPeerIsTyping(true);
+      }
+    };
+    const onTypingStop = (payload: any) => {
+      if (Number(payload?.userId) !== Number(user.id)) {
+        setPeerIsTyping(false);
+      }
+    };
+
     socket.on("message:new", onMessageNew);
     socket.on("message:updated", onMessageUpdated);
     socket.on("call:offer", onCallOffer);
     socket.on("call:answer", onCallAnswer);
     socket.on("call:end", onCallEnd);
     socket.on("connect", onSocketConnect);
+    socket.on("typing:start", onTypingStart);
+    socket.on("typing:stop", onTypingStop);
     return () => {
       socket.off("message:new", onMessageNew);
       socket.off("message:updated", onMessageUpdated);
@@ -587,6 +626,8 @@ export function MessagesScreen({
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
       socket.off("connect", onSocketConnect);
+      socket.off("typing:start", onTypingStart);
+      socket.off("typing:stop", onTypingStop);
     };
   }, [
     loadConversations,
@@ -661,8 +702,14 @@ export function MessagesScreen({
   }, [messages.length, scrollMessagesToEnd, selectedConv?.id]);
 
   useEffect(() => {
-    const onShow = () => setIsKeyboardVisible(true);
-    const onHide = () => setIsKeyboardVisible(false);
+    const onShow = (e: { endCoordinates: { height: number } }) => {
+      setIsKeyboardVisible(true);
+      setKeyboardHeight(e.endCoordinates.height);
+    };
+    const onHide = () => {
+      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
+    };
 
     const showSub = Keyboard.addListener('keyboardDidShow', onShow);
     const hideSub = Keyboard.addListener('keyboardDidHide', onHide);
@@ -672,6 +719,20 @@ export function MessagesScreen({
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    setPeerIsTyping(false);
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [selectedConv?.id]);
+
+  // Cuộn xuống cuối khi bàn phím hiện ra trên Android để tin nhắn không bị che
+  useEffect(() => {
+    if (Platform.OS !== "android" || !isKeyboardVisible || !selectedConv) return;
+    const t = setTimeout(() => scrollMessagesToEnd(false), 80);
+    return () => clearTimeout(t);
+  }, [isKeyboardVisible, scrollMessagesToEnd, selectedConv]);
 
   const {
     showComposeModal,
@@ -698,6 +759,26 @@ export function MessagesScreen({
     initialDirectRouteKey,
     onInitialDirectHandled,
   });
+
+  const handleMessageTextChange = useCallback(
+    (text: string) => {
+      setMessageText(text);
+      const socket = socketRef.current;
+      if (!socket || !selectedConv) return;
+
+      if (text.trim()) {
+        socket.emit("typing:start", { conversationId: selectedConv.id });
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          socket.emit("typing:stop", { conversationId: selectedConv.id });
+        }, 2500);
+      } else {
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        socket.emit("typing:stop", { conversationId: selectedConv.id });
+      }
+    },
+    [selectedConv],
+  );
 
   const handleSend = useCallback(async () => {
     const text = messageText.trim();
@@ -1521,11 +1602,12 @@ export function MessagesScreen({
       <TopBar
         title={
           selectedConv
-            ? selectedConv.name || "Cuoc tro chuyen"
+            ? resolveConvDisplayName(selectedConv, user.id)
             : mode === "groups"
-              ? "Nhom chat"
-              : "Tin nhan"
+              ? "Nhóm chat"
+              : "Tin nhắn"
         }
+        subtitle={selectedConv && peerIsTyping ? "Đang soạn tin..." : undefined}
         leftAction={
           selectedConv
             ? { label: "Quay lai", onPress: () => setSelectedConv(null) }
@@ -1593,6 +1675,7 @@ export function MessagesScreen({
             renderItem={({ item }) => (
               <ConversationItem
                 conversation={item}
+                displayName={resolveConvDisplayName(item, user.id)}
                 onPress={() => {
                   void openConversation(item);
                 }}
@@ -1661,7 +1744,9 @@ export function MessagesScreen({
           />
           <View
             style={{
-              marginBottom: isKeyboardVisible ? 8 : tabBarHeight,
+              marginBottom: isKeyboardVisible
+                ? (Platform.OS === "android" ? keyboardHeight + 8 : 8)
+                : tabBarHeight,
             }}
           >
             {aiSuggestions.length > 0 && (
@@ -1712,7 +1797,7 @@ export function MessagesScreen({
               <View style={{ flex: 1 }}>
                 <MessageInput
                   value={messageText}
-                  onChangeText={setMessageText}
+                  onChangeText={handleMessageTextChange}
                   onSend={handleSend}
                   onPickImage={() => {
                     void handlePickImage();

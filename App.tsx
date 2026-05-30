@@ -17,6 +17,8 @@ import { SearchScreen } from "./src/screens/SearchScreen";
 import { AIChatScreen } from "./src/screens/AIChatScreen";
 import { FriendsScreen } from "./src/screens/FriendsScreen";
 import { MyProfileScreen } from "./src/screens/MyProfileScreen";
+import { AdminScreen } from "./src/screens/admin/AdminScreen";
+import { ModeratorScreen } from "./src/screens/moderator/ModeratorScreen";
 import { AppNavigator } from "./src/navigation/AppNavigator";
 import { Loading } from "./src/components/common/Loading";
 import { api, authStore, getSocket, disconnectSocket } from "./src/lib";
@@ -279,6 +281,10 @@ export default function App() {
             onBack={() => setActiveTab("profile")}
           />
         );
+      case "admin":
+        return <AdminScreen user={user} />;
+      case "mod":
+        return <ModeratorScreen user={user} />;
       default:
         return (
           <FeedScreen
@@ -305,6 +311,7 @@ export default function App() {
             <AppNavigator
               activeTab={activeTab === "profile-settings" ? "profile" : activeTab}
               onTabChange={handleTabChange}
+              userRole={user?.role}
             />
           ) : null}
         </View>
