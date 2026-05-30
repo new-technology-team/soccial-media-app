@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Text, ScrollView, TouchableOpacity } from "react-native";
 import { Input } from "../common/Input";
 import { Button } from "../common/Button";
+import { DatePickerField } from "../common/DatePickerField";
 import { api } from "../../lib/api";
 import { authStore } from "../../lib/auth";
 import type { AuthUser } from "../../types";
@@ -10,6 +11,27 @@ type AuthMode = "login" | "register" | "verify" | "forgot" | "reset";
 
 interface AuthFormProps {
   onLogin: (user: AuthUser) => void;
+}
+
+const modeSubtitle: Record<AuthMode, string> = {
+  login: "Chào mừng bạn quay trở lại",
+  register: "Tạo tài khoản miễn phí",
+  verify: "Kiểm tra hộp thư của bạn",
+  forgot: "Nhập thông tin để lấy lại tài khoản",
+  reset: "Đặt mật khẩu mới cho tài khoản",
+};
+
+const GENDER_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "male", label: "Nam" },
+  { value: "female", label: "Nữ" },
+  { value: "other", label: "Khác" },
+];
+
+function dobToApiFormat(dob: string): string | undefined {
+  if (dob.length !== 10) return undefined;
+  const [dd, mm, yyyy] = dob.split("/");
+  if (!dd || !mm || !yyyy || yyyy.length !== 4) return undefined;
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function AuthForm({ onLogin }: AuthFormProps) {
@@ -36,7 +58,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   };
 
   const handleLogin = async () => {
-    if (!emailOrPhone || !password) {
+    if (!emailOrPhone.trim() || !password) {
       setError("Vui lòng nhập đầy đủ thông tin");
       return;
     }
@@ -44,7 +66,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
     setError("");
     setSuccess("");
     try {
-      const res = await api.login({ emailOrPhone, password });
+      const res = await api.login({ emailOrPhone: emailOrPhone.trim(), password });
       await authStore.setTokens({
         accessToken: res.accessToken,
         refreshToken: res.refreshToken,
@@ -58,35 +80,57 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   };
 
   const handleRegister = async () => {
-    if (!emailOrPhone || !password) {
-      setError("Vui lòng nhập đầy đủ thông tin");
+    if (!fullName.trim()) {
+      setError("Vui lòng nhập họ và tên");
+      return;
+    }
+    if (!emailOrPhone.trim()) {
+      setError("Vui lòng nhập email hoặc số điện thoại");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Mật khẩu tối thiểu 6 ký tự");
       return;
     }
     if (password !== confirmPassword) {
-      setError("Mật khẩu không khớp");
+      setError("Mật khẩu xác nhận không khớp");
       return;
     }
+
     setIsLoading(true);
     setError("");
     setSuccess("");
     try {
-      // Backend registers and returns tokens directly (no OTP)
-      await api.register({
-        emailOrPhone,
+      const registerRes = await api.register({
+        emailOrPhone: emailOrPhone.trim(),
         password,
-        fullName: fullName || undefined,
-        dateOfBirth: dateOfBirth || undefined,
+        fullName: fullName.trim(),
+        dateOfBirth: dobToApiFormat(dateOfBirth),
         gender: gender || undefined,
       });
-      // Auto-login after successful registration
-      const res = await api.login({ emailOrPhone, password });
+
+      // Nếu backend yêu cầu xác thực OTP → chuyển sang bước verify
+      if (registerRes.requiresVerification || registerRes.otpSent) {
+        setMode("verify");
+        setSuccess(
+          registerRes.message ||
+            `Mã xác thực đã gửi tới ${emailOrPhone.trim()}`,
+        );
+        return;
+      }
+
+      // Không cần OTP → auto-login
+      const res = await api.login({
+        emailOrPhone: emailOrPhone.trim(),
+        password,
+      });
       await authStore.setTokens({
         accessToken: res.accessToken,
         refreshToken: res.refreshToken,
       });
       onLogin(res.user);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Đăng ký thất bại");
+      setError(err instanceof Error ? err.message : "Đăng ký thất bại. Vui lòng thử lại.");
     } finally {
       setIsLoading(false);
     }
@@ -115,7 +159,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   };
 
   const handleForgot = async () => {
-    if (!emailOrPhone) {
+    if (!emailOrPhone.trim()) {
       setError("Vui lòng nhập email hoặc số điện thoại");
       return;
     }
@@ -123,7 +167,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
     setError("");
     setSuccess("");
     try {
-      const res = await api.forgotPassword(emailOrPhone);
+      const res = await api.forgotPassword(emailOrPhone.trim());
       setSuccess(
         res.message + (res.resetCode ? ` (Demo: ${res.resetCode})` : ""),
       );
@@ -139,6 +183,10 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   const handleReset = async () => {
     if (!code || !newPassword) {
       setError("Vui lòng nhập mã và mật khẩu mới");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Mật khẩu tối thiểu 6 ký tự");
       return;
     }
     setIsLoading(true);
@@ -166,6 +214,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
     reset: "Đặt lại mật khẩu",
   };
 
+  const showTabs = mode === "login" || mode === "register";
+
   return (
     <ScrollView
       className="flex-1 bg-background"
@@ -183,8 +233,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
       </View>
 
       <View className="px-4 py-6 flex-1">
-        {/* Mode Tabs */}
-        {mode === "login" && (
+        {/* Mode Tabs — hiện ở cả login và register */}
+        {showTabs && (
           <View className="flex-row mb-6 bg-surface-secondary rounded-xl p-1">
             {(["login", "register"] as AuthMode[]).map((m) => (
               <TouchableOpacity
@@ -194,8 +244,11 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                   setMode(m);
                   resetForms();
                 }}
+                activeOpacity={0.7}
               >
-                <Text className="text-center text-sm font-semibold text-foreground">
+                <Text
+                  className={`text-center text-sm font-semibold ${mode === m ? "text-primary" : "text-muted-foreground"}`}
+                >
                   {m === "login" ? "Đăng nhập" : "Đăng ký"}
                 </Text>
               </TouchableOpacity>
@@ -207,17 +260,17 @@ export function AuthForm({ onLogin }: AuthFormProps) {
           {modeTitle[mode]}
         </Text>
         <Text className="text-sm text-muted-foreground mb-6">
-          Chào mừng bạn quay trở lại
+          {modeSubtitle[mode]}
         </Text>
 
         {/* Error / Success */}
         {error ? (
-          <View className="bg-red-50 border border-[#fecaca] rounded-xl px-4 py-3 mb-3">
+          <View className="bg-red-50 border border-[#fecaca] rounded-xl px-4 py-3 mb-4">
             <Text className="text-danger text-sm font-medium">{error}</Text>
           </View>
         ) : null}
         {success ? (
-          <View className="bg-green-50 border border-[#bbf7d0] rounded-xl px-4 py-3 mb-3">
+          <View className="bg-green-50 border border-[#bbf7d0] rounded-xl px-4 py-3 mb-4">
             <Text className="text-success text-sm font-medium">{success}</Text>
           </View>
         ) : null}
@@ -226,26 +279,29 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         {mode === "login" && (
           <View>
             <Input
+              label="Email hoặc số điện thoại"
               icon="📧"
-              placeholder="Email hoặc số điện thoại"
+              placeholder="example@email.com"
               value={emailOrPhone}
               onChangeText={setEmailOrPhone}
               keyboardType="email-address"
               autoCapitalize="none"
             />
             <Input
+              label="Mật khẩu"
               icon="🔒"
-              placeholder="Mật khẩu"
+              placeholder="Nhập mật khẩu"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
             />
             <TouchableOpacity
-              className="self-end mb-4"
+              className="self-end mb-4 -mt-1"
               onPress={() => {
                 setMode("forgot");
                 resetForms();
               }}
+              activeOpacity={0.7}
             >
               <Text className="text-primary font-semibold text-sm">
                 Quên mật khẩu?
@@ -263,54 +319,82 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         {mode === "register" && (
           <View>
             <Input
+              label="Họ và tên *"
               icon="👤"
-              placeholder="Họ và tên"
+              placeholder="Nguyễn Văn A"
               value={fullName}
               onChangeText={setFullName}
+              autoCapitalize="words"
             />
             <Input
+              label="Email hoặc số điện thoại *"
               icon="📧"
-              placeholder="Email hoặc số điện thoại"
+              placeholder="example@email.com"
               value={emailOrPhone}
               onChangeText={setEmailOrPhone}
               keyboardType="email-address"
               autoCapitalize="none"
             />
-            <View className="flex-row gap-3">
-              <View className="flex-1">
-                <Input
-                  placeholder="Ngày sinh (YYYY-MM-DD)"
-                  value={dateOfBirth}
-                  onChangeText={setDateOfBirth}
-                />
-              </View>
-              <View className="flex-1">
-                <Input
-                  placeholder="Giới tính"
-                  value={gender}
-                  onChangeText={setGender}
-                />
+
+            {/* Ngày sinh */}
+            <DatePickerField
+              label="Ngày sinh"
+              value={dateOfBirth}
+              onChange={setDateOfBirth}
+            />
+
+            {/* Giới tính — pill buttons */}
+            <View className="mb-3">
+              <Text className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">
+                Giới tính
+              </Text>
+              <View className="flex-row gap-2">
+                {GENDER_OPTIONS.map(({ value, label }) => (
+                  <TouchableOpacity
+                    key={value}
+                    onPress={() => setGender(value)}
+                    activeOpacity={0.75}
+                    className={`flex-1 py-3 rounded-xl border items-center ${
+                      gender === value
+                        ? "bg-primary border-primary"
+                        : "bg-surface border-border"
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold ${
+                        gender === value ? "text-white" : "text-foreground"
+                      }`}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
+
             <Input
+              label="Mật khẩu *"
               icon="🔒"
-              placeholder="Mật khẩu"
+              placeholder="Tối thiểu 6 ký tự"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
             />
             <Input
+              label="Xác nhận mật khẩu *"
               icon="🔐"
-              placeholder="Xác nhận mật khẩu"
+              placeholder="Nhập lại mật khẩu"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
             />
+
             <Button
-              title={isLoading ? "Đang đăng ký..." : "Đăng ký"}
+              title={isLoading ? "Đang đăng ký..." : "Tạo tài khoản"}
               onPress={handleRegister}
               loading={isLoading}
             />
+
             <View className="flex-row justify-center mt-4">
               <Text className="text-muted-foreground text-sm">
                 Đã có tài khoản?{" "}
@@ -320,6 +404,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                   setMode("login");
                   resetForms();
                 }}
+                activeOpacity={0.7}
               >
                 <Text className="text-primary font-semibold text-sm">
                   Đăng nhập
@@ -333,10 +418,12 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         {mode === "verify" && (
           <View>
             <Text className="text-sm text-muted-foreground mb-6">
-              Nhập mã OTP đã gửi tới {emailOrPhone}
+              Nhập mã OTP đã gửi tới{" "}
+              <Text className="font-semibold text-foreground">{emailOrPhone}</Text>
             </Text>
             <Input
-              placeholder="Mã OTP 6 số"
+              label="Mã OTP"
+              placeholder="Nhập mã 6 số"
               value={code}
               onChangeText={setCode}
               keyboardType="number-pad"
@@ -348,7 +435,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
               loading={isLoading}
             />
             <View className="flex-row justify-center mt-4">
-              <TouchableOpacity onPress={() => setMode("login")}>
+              <TouchableOpacity onPress={() => setMode("login")} activeOpacity={0.7}>
                 <Text className="text-primary font-semibold text-sm">
                   Quay về đăng nhập
                 </Text>
@@ -360,19 +447,17 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         {/* ── FORGOT ── */}
         {mode === "forgot" && (
           <View>
-            <Text className="text-sm text-muted-foreground mb-6">
-              Nhập email hoặc số điện thoại để nhận mã đặt lại
-            </Text>
             <Input
+              label="Email hoặc số điện thoại"
               icon="📧"
-              placeholder="Email hoặc số điện thoại"
+              placeholder="example@email.com"
               value={emailOrPhone}
               onChangeText={setEmailOrPhone}
               keyboardType="email-address"
               autoCapitalize="none"
             />
             <Button
-              title={isLoading ? "Đang gửi..." : "Gửi mã"}
+              title={isLoading ? "Đang gửi..." : "Gửi mã đặt lại"}
               onPress={handleForgot}
               loading={isLoading}
             />
@@ -382,6 +467,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                   setMode("login");
                   resetForms();
                 }}
+                activeOpacity={0.7}
               >
                 <Text className="text-primary font-semibold text-sm">
                   Quay về đăng nhập
@@ -394,17 +480,16 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         {/* ── RESET ── */}
         {mode === "reset" && (
           <View>
-            <Text className="text-sm text-muted-foreground mb-6">
-              Nhập mã và mật khẩu mới
-            </Text>
             <Input
-              placeholder="Mã đặt lại"
+              label="Mã đặt lại"
+              placeholder="Nhập mã từ email/SMS"
               value={code}
               onChangeText={setCode}
               keyboardType="number-pad"
             />
             <Input
-              placeholder="Mật khẩu mới"
+              label="Mật khẩu mới"
+              placeholder="Tối thiểu 6 ký tự"
               value={newPassword}
               onChangeText={setNewPassword}
               secureTextEntry
@@ -420,6 +505,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                   setMode("login");
                   resetForms();
                 }}
+                activeOpacity={0.7}
               >
                 <Text className="text-primary font-semibold text-sm">
                   Quay về đăng nhập

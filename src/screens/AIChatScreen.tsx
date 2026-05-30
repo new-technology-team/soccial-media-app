@@ -314,9 +314,9 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
         leftAction={
           onExit
             ? {
-                label: "Quay lai",
-                onPress: onExit,
-              }
+              label: "Quay lai",
+              onPress: onExit,
+            }
             : undefined
         }
         rightAction={

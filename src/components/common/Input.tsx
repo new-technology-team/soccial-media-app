@@ -44,6 +44,7 @@ export function Input({
   style,
 }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const [showText, setShowText] = useState(false);
 
   return (
     <View className="mb-3" style={style}>
@@ -72,7 +73,7 @@ export function Input({
           placeholderTextColor="#7e8592"
           value={value}
           onChangeText={onChangeText}
-          secureTextEntry={secureTextEntry}
+          secureTextEntry={secureTextEntry && !showText}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           multiline={multiline}
@@ -85,9 +86,10 @@ export function Input({
         {secureTextEntry && (
           <TouchableOpacity
             className="absolute right-3 top-1/2 -translate-y-1/2"
-            onPress={() => {}}
+            onPress={() => setShowText((v) => !v)}
+            activeOpacity={0.7}
           >
-            <Text className="text-muted-foreground text-sm">{"👁"}</Text>
+            <Text className="text-muted-foreground text-base">{showText ? "🙈" : "👁"}</Text>
           </TouchableOpacity>
         )}
       </View>
