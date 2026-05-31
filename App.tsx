@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   StatusBar,
@@ -27,6 +27,8 @@ import type { AuthUser } from "./src/types";
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [activeTab, setActiveTab] = useState("feed");
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
   const [feedFocusPostId, setFeedFocusPostId] = useState<string | null>(null);
   const [feedOpenCommentsPostId, setFeedOpenCommentsPostId] = useState<
     string | null
@@ -80,6 +82,8 @@ export default function App() {
       const fromUserId = Number(payload?.fromUserId || 0);
       if (!conversationId || !roomId || !fromUserId) return;
       if (fromUserId === Number(user.id)) return;
+      // Khi đang ở tab Tin nhắn, MessagesScreen tự xử lý call:offer → tránh hiển thị modal nhân đôi.
+      if (activeTabRef.current === "messages") return;
 
       setIncomingCallBootstrap({
         conversationId,

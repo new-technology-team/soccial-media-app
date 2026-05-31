@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
@@ -46,6 +47,8 @@ type CallPayload = {
   mode?: "video";
   answeredAt?: number;
   reason?: string;
+  // Liên thông với web: báo bên gọi (web đang WebRTC) chuyển sang mở Jitsi.
+  useJitsi?: boolean;
 };
 
 type IncomingCallState = {
@@ -123,11 +126,21 @@ function buildCallRoomId(conversationId: string, userId: number): string {
   return sanitizeRoomName(`zchat-${conversationId}-${userId}-${Date.now()}`);
 }
 
-function resolveVideoCallUrl(roomId: string): string {
+function resolveVideoCallUrl(roomId: string, displayName?: string): string {
   const base = String(
     process.env.EXPO_PUBLIC_VIDEO_CALL_BASE_URL || DEFAULT_VIDEO_CALL_BASE_URL,
   ).replace(/\/+$/, "");
-  return `${base}/${encodeURIComponent(roomId)}`;
+  // Bỏ màn hình prejoin để vào thẳng phòng, hiển thị tên người dùng.
+  const hash = [
+    "config.prejoinConfig.enabled=false",
+    "config.prejoinPageEnabled=false",
+    displayName
+      ? `userInfo.displayName=${encodeURIComponent(`"${displayName}"`)}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("&");
+  return `${base}/${encodeURIComponent(roomId)}${hash ? `#${hash}` : ""}`;
 }
 
 function resolveConvDisplayName(
@@ -230,6 +243,15 @@ export function MessagesScreen({
   const conversationsRef = useRef<Conversation[]>([]);
   const handledMessageEventRef = useRef<Set<string>>(new Set());
   const handledIncomingBootstrapRef = useRef<number>(0);
+  const pendingJitsiCleanupRef = useRef<boolean>(false);
+  const callLogRef = useRef<{
+    conversationId: string;
+    roomId: string;
+    startedAt: number;
+    answeredAt: number | null;
+    targetUserId?: number;
+    logged: boolean;
+  } | null>(null);
 
   const filteredConversations = useMemo(() => {
     const q = conversationKeyword.trim().toLowerCase();
@@ -380,19 +402,74 @@ export function MessagesScreen({
     }
   }, []);
 
-  const openVideoCallRoom = useCallback(async (roomId: string) => {
-    const url = resolveVideoCallUrl(roomId);
-    setIsOpeningCallRoom(true);
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        throw new Error("Thiet bi khong mo duoc lien ket cuoc goi video.");
+  const openVideoCallRoom = useCallback(
+    async (roomId: string, displayName?: string) => {
+      const url = resolveVideoCallUrl(
+        roomId,
+        displayName || user.fullName || "Nguoi dung",
+      );
+      setIsOpeningCallRoom(true);
+      // Đánh dấu để dọn modal treo khi quay lại app từ trình duyệt Jitsi.
+      pendingJitsiCleanupRef.current = true;
+      try {
+        const supported = await Linking.canOpenURL(url);
+        if (!supported) {
+          throw new Error("Thiet bi khong mo duoc lien ket cuoc goi video.");
+        }
+        await Linking.openURL(url);
+      } finally {
+        setIsOpeningCallRoom(false);
       }
-      await Linking.openURL(url);
-    } finally {
-      setIsOpeningCallRoom(false);
-    }
-  }, []);
+    },
+    [user.fullName],
+  );
+
+  // Ghi lịch sử cuộc gọi — chỉ phía người khởi tạo (callLogRef được set khi bắt đầu gọi).
+  const logCall = useCallback(
+    (
+      status:
+        | "completed"
+        | "missed"
+        | "rejected"
+        | "no_answer"
+        | "cancelled"
+        | "failed",
+    ) => {
+      const meta = callLogRef.current;
+      if (!meta || meta.logged) return;
+      meta.logged = true;
+      const conv = conversationsRef.current.find(
+        (c) => String(c.id) === meta.conversationId,
+      );
+      const participantIds =
+        (conv?.members || [])
+          .map((m: any) => Number(m.userId))
+          .filter((id: number) => id > 0) ||
+        (meta.targetUserId
+          ? [Number(user.id), meta.targetUserId]
+          : [Number(user.id)]);
+      void api
+        .createCall({
+          conversationId: meta.conversationId,
+          initiatorId: Number(user.id),
+          participantIds: participantIds.length
+            ? participantIds
+            : [Number(user.id), ...(meta.targetUserId ? [meta.targetUserId] : [])],
+          callType: "video",
+          mode: conv?.isGroup ? "group" : "private",
+          status,
+          startedAt: meta.startedAt,
+          answeredAt: meta.answeredAt,
+          endedAt: Date.now(),
+          durationSec: meta.answeredAt
+            ? Math.max(0, Math.round((Date.now() - meta.answeredAt) / 1000))
+            : 0,
+          withName: conv?.name || undefined,
+        })
+        .catch(() => undefined);
+    },
+    [user.id],
+  );
 
   const markMessageEventHandled = useCallback((eventId: string) => {
     const key = String(eventId || "").trim();
@@ -551,15 +628,21 @@ export function MessagesScreen({
       if (!payload.conversationId || !payload.roomId) return;
 
       let shouldOpen = false;
+      let openName = "";
       setOutgoingCall((prev) => {
         if (!prev) return prev;
         if (prev.payload.roomId !== payload.roomId) return prev;
         shouldOpen = true;
+        openName = prev.conversationName || "";
         return null;
       });
 
       if (shouldOpen) {
-        void openVideoCallRoom(payload.roomId).catch((err) => {
+        // Cuộc gọi đã được trả lời → ghi nhận đã kết nối (chỉ phía gọi).
+        if (callLogRef.current && callLogRef.current.roomId === payload.roomId) {
+          callLogRef.current.answeredAt = payload.answeredAt || Date.now();
+        }
+        void openVideoCallRoom(payload.roomId, openName).catch((err) => {
           Alert.alert(
             "Khong the mo cuoc goi video",
             err instanceof Error ? err.message : "Vui long thu lai",
@@ -592,8 +675,47 @@ export function MessagesScreen({
         return null;
       });
 
-      if (outgoingStopped && payload.reason === "rejected") {
+      if (outgoingStopped) {
+        const rejected = payload.reason === "rejected";
+        logCall(rejected ? "rejected" : "completed");
+        if (rejected) {
+          Alert.alert("Cuoc goi bi tu choi", "Nguoi nhan da tu choi cuoc goi.");
+        }
+      }
+    };
+
+    // Web/mobile từ chối nay dùng call:reject (phân biệt với call:end).
+    const onCallReject = (raw: any) => {
+      const roomId = String(raw?.roomId || "").trim();
+      let stopped = false;
+      setOutgoingCall((prev) => {
+        if (!prev) return prev;
+        if (roomId && prev.payload.roomId !== roomId) return prev;
+        stopped = true;
+        return null;
+      });
+      if (stopped) {
+        logCall("rejected");
         Alert.alert("Cuoc goi bi tu choi", "Nguoi nhan da tu choi cuoc goi.");
+      }
+    };
+
+    // Người được gọi không trực tuyến (backend phản hồi trực tiếp cho người gọi).
+    const onCallUnavailable = (raw: any) => {
+      const roomId = String(raw?.roomId || "").trim();
+      let stopped = false;
+      setOutgoingCall((prev) => {
+        if (!prev) return prev;
+        if (roomId && prev.payload.roomId !== roomId) return prev;
+        stopped = true;
+        return null;
+      });
+      if (stopped || !roomId) {
+        logCall("no_answer");
+        Alert.alert(
+          "Khong the goi",
+          "Nguoi dung hien khong truc tuyen.",
+        );
       }
     };
 
@@ -616,6 +738,8 @@ export function MessagesScreen({
     socket.on("call:offer", onCallOffer);
     socket.on("call:answer", onCallAnswer);
     socket.on("call:end", onCallEnd);
+    socket.on("call:reject", onCallReject);
+    socket.on("call:unavailable", onCallUnavailable);
     socket.on("connect", onSocketConnect);
     socket.on("typing:start", onTypingStart);
     socket.on("typing:stop", onTypingStop);
@@ -625,12 +749,15 @@ export function MessagesScreen({
       socket.off("call:offer", onCallOffer);
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
+      socket.off("call:reject", onCallReject);
+      socket.off("call:unavailable", onCallUnavailable);
       socket.off("connect", onSocketConnect);
       socket.off("typing:start", onTypingStart);
       socket.off("typing:stop", onTypingStop);
     };
   }, [
     loadConversations,
+    logCall,
     markMessageEventHandled,
     openConversation,
     openVideoCallRoom,
@@ -888,7 +1015,7 @@ export function MessagesScreen({
 
       setIsUploadingAttachment(true);
       const ext = getExtensionFromMimeType(asset.mimeType);
-      const uploaded = await api.uploadChatFileBase64({
+      const uploaded = await api.uploadChatFileBase64(selectedConv.id, {
         fileName: asset.fileName || `chat-image-${Date.now()}.${ext}`,
         contentType: asset.mimeType || "image/jpeg",
         base64Data: base64,
@@ -950,7 +1077,7 @@ export function MessagesScreen({
       }
 
       setIsUploadingAttachment(true);
-      const uploaded = await api.uploadChatFileBase64({
+      const uploaded = await api.uploadChatFileBase64(selectedConv.id, {
         fileName: asset.name || `chat-file-${Date.now()}`,
         contentType: asset.mimeType || "application/octet-stream",
         base64Data: base64,
@@ -1196,6 +1323,15 @@ export function MessagesScreen({
         : callTargetUserId || undefined,
     };
 
+    callLogRef.current = {
+      conversationId: payload.conversationId,
+      roomId,
+      startedAt: Date.now(),
+      answeredAt: null,
+      targetUserId: payload.targetUserId,
+      logged: false,
+    };
+
     socket.emit("call:offer", payload);
 
     if (isGroupCallConversation) {
@@ -1241,6 +1377,7 @@ export function MessagesScreen({
     }
 
     const payload = incomingCall.payload;
+    const callName = incomingCall.conversationName;
     socket.emit("call:answer", {
       conversationId: payload.conversationId,
       roomId: payload.roomId,
@@ -1248,11 +1385,13 @@ export function MessagesScreen({
       fromUserId: user.id,
       fromUserName: user.fullName || "Nguoi dung",
       answeredAt: Date.now(),
+      // Báo cho bên gọi (có thể là web đang WebRTC) chuyển sang mở Jitsi cùng phòng.
+      useJitsi: true,
     });
     setIncomingCall(null);
 
     try {
-      await openVideoCallRoom(payload.roomId);
+      await openVideoCallRoom(payload.roomId, callName);
     } catch (err) {
       Alert.alert(
         "Khong the mo cuoc goi video",
@@ -1269,14 +1408,18 @@ export function MessagesScreen({
 
   const handleDeclineIncomingCall = useCallback(() => {
     if (!incomingCall) return;
-    emitCallEnd({
+    const socket = socketRef.current;
+    // Dùng call:reject để bên gọi phân biệt rõ "bị từ chối".
+    socket?.emit("call:reject", {
       conversationId: incomingCall.payload.conversationId,
       roomId: incomingCall.payload.roomId,
       targetUserId: incomingCall.payload.fromUserId || undefined,
+      fromUserId: user.id,
+      fromUserName: user.fullName || "Nguoi dung",
       reason: "rejected",
     });
     setIncomingCall(null);
-  }, [emitCallEnd, incomingCall]);
+  }, [incomingCall, user.fullName, user.id]);
 
   const handleCancelOutgoingCall = useCallback(() => {
     if (!outgoingCall) return;
@@ -1296,14 +1439,31 @@ export function MessagesScreen({
         conversationId: outgoingCall.payload.conversationId,
         roomId: outgoingCall.payload.roomId,
         targetUserId: outgoingCall.payload.targetUserId,
-        reason: "timeout",
+        reason: "no_answer",
       });
+      logCall("no_answer");
       setOutgoingCall(null);
       Alert.alert("Không có phản hồi", "Người nhận chưa trả lời cuộc gọi.");
     }, 25000);
 
     return () => clearTimeout(timer);
-  }, [emitCallEnd, outgoingCall]);
+  }, [emitCallEnd, logCall, outgoingCall]);
+
+  // Khi quay lại app từ trình duyệt Jitsi: dọn modal cuộc gọi còn treo + ghi nhận đã kết thúc.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      if (!pendingJitsiCleanupRef.current) return;
+      pendingJitsiCleanupRef.current = false;
+      // Nếu cuộc gọi đã được trả lời mà chưa ghi log → ghi 'completed' với thời lượng thực.
+      if (callLogRef.current?.answeredAt && !callLogRef.current.logged) {
+        logCall("completed");
+      }
+      setOutgoingCall(null);
+      setIncomingCall(null);
+    });
+    return () => sub.remove();
+  }, [logCall]);
 
   const handleToggleNotifications = useCallback(async () => {
     if (!selectedConv) return;
@@ -1386,7 +1546,7 @@ export function MessagesScreen({
       }
 
       setIsMutatingConversation(true);
-      const uploaded = await api.uploadChatFileBase64({
+      const uploaded = await api.uploadChatFileBase64(selectedConv.id, {
         fileName: asset.fileName || `group-avatar-${Date.now()}.jpg`,
         contentType: asset.mimeType || "image/jpeg",
         base64Data: asset.base64,

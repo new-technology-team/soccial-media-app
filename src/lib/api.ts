@@ -652,7 +652,7 @@ export const api = {
       `/api/social/posts/${encodeURIComponent(String(postId))}/comments`,
       {
         method: "POST",
-        body: JSON.stringify({ content, parentId: parentId || null }),
+        body: JSON.stringify({ content, parentCommentId: parentId || null }),
       },
     ).then((res) => ({ comment: mapFeedComment(res.comment) })),
 
@@ -937,7 +937,7 @@ export const api = {
         privacyProfilePhoto: boolean;
         allowFriendRequests: boolean;
       };
-    }>("/api/social/users/settings").then((res) => res.settings),
+    }>("/api/social/settings").then((res) => res.settings),
 
   updatePrivacySettings: (payload: {
     privacyLastSeen?: boolean;
@@ -950,7 +950,7 @@ export const api = {
         privacyProfilePhoto: boolean;
         allowFriendRequests: boolean;
       };
-    }>("/api/social/users/settings", {
+    }>("/api/social/settings", {
       method: "PUT",
       body: JSON.stringify(payload),
     }).then((res) => res.settings),
@@ -991,8 +991,9 @@ export const api = {
     }),
 
   rejectFriendRequest: (userId: number) =>
-    request<{ message: string }>(`/api/social/friends/${userId}/reject`, {
-      method: "POST",
+    // Backend không có endpoint /reject riêng — từ chối = xoá lời mời (DELETE /friends/:id).
+    request<{ message: string }>(`/api/social/friends/${userId}`, {
+      method: "DELETE",
     }),
 
   removeFriend: (userId: number) =>
@@ -1011,7 +1012,9 @@ export const api = {
     }),
 
   listPendingFriendRequests: () =>
-    request<Array<{ id: number; fullName: string; avatarUrl: string | null }>>("/api/social/friends/pending"),
+    request<{ requests: Array<{ id: number; fullName: string; avatarUrl: string | null }> }>(
+      "/api/social/friends/requests",
+    ).then((res) => (Array.isArray(res?.requests) ? res.requests : [])),
 
   // AI Chat
   aiChat: (message: string, history?: Array<{ role: 'user' | 'model'; text: string }>) =>
@@ -1069,13 +1072,16 @@ export const api = {
       fileUrl: resolveAssetUrl(res.fileUrl || res.mediaUrl) || "",
     })),
 
-  uploadChatFileBase64: (payload: {
-    fileName: string;
-    contentType: string;
-    base64Data: string;
-  }) =>
+  uploadChatFileBase64: (
+    conversationId: string | number,
+    payload: {
+      fileName: string;
+      contentType: string;
+      base64Data: string;
+    },
+  ) =>
     request<{ fileUrl: string; fileName?: string; contentType?: string; size?: number }>(
-      "/api/chat/uploads/base64",
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages/upload-base64`,
       {
         method: "POST",
         body: JSON.stringify(payload),
@@ -1100,7 +1106,7 @@ export const api = {
   // Group management
   renameGroupConversation: (conversationId: string | number, name: string) =>
     request<{ message: string; conversation: any }>(
-      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}`,
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/profile`,
       {
         method: "PATCH",
         body: JSON.stringify({ name }),
@@ -1157,6 +1163,25 @@ export const api = {
         method: "DELETE",
       },
     ),
+
+  // Calls — ghi lịch sử cuộc gọi + cuộc gọi nhỡ (backend tự tạo notification)
+  createCall: (payload: {
+    conversationId: string;
+    initiatorId: number;
+    participantIds: number[];
+    callType: "voice" | "video";
+    mode: "private" | "group";
+    status: "completed" | "missed" | "rejected" | "no_answer" | "cancelled" | "failed";
+    startedAt?: number;
+    answeredAt?: number | null;
+    endedAt?: number | null;
+    durationSec?: number;
+    withName?: string;
+  }) =>
+    request<{ id: string }>("/api/social/calls", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   // ── Admin ──────────────────────────────────────────────────────────────────
   adminDashboard: () =>
