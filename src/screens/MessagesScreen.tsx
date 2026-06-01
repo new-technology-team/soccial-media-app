@@ -122,8 +122,39 @@ function sanitizeRoomName(input: string): string {
   return value || `zchat-${Date.now()}`;
 }
 
-function buildCallRoomId(conversationId: string, userId: number): string {
-  return sanitizeRoomName(`zchat-${conversationId}-${userId}-${Date.now()}`);
+// Fallback (cố định theo hội thoại) khi server không cấp phát phòng — vẫn hội tụ về cùng 1 phòng.
+function buildCallRoomId(conversationId: string): string {
+  return sanitizeRoomName(`zchat-${conversationId}`);
+}
+
+// Lấy phòng Jitsi của phiên gọi từ server (tái dùng nếu cuộc gọi đang diễn ra). Có timeout fallback.
+function acquireCallRoom(
+  socket: { emit: (ev: string, data: unknown, ack?: (resp: unknown) => void) => void } | null | undefined,
+  conversationId: string,
+): Promise<string> {
+  return new Promise((resolve) => {
+    const fallback = buildCallRoomId(conversationId);
+    if (!socket) {
+      resolve(fallback);
+      return;
+    }
+    let done = false;
+    const finish = (roomId?: string) => {
+      if (done) return;
+      done = true;
+      resolve(roomId || fallback);
+    };
+    const timer = setTimeout(() => finish(), 4000);
+    try {
+      socket.emit("call:room:acquire", { conversationId }, (resp: unknown) => {
+        clearTimeout(timer);
+        finish(String((resp as { roomId?: string })?.roomId || ""));
+      });
+    } catch {
+      clearTimeout(timer);
+      finish();
+    }
+  });
 }
 
 function resolveVideoCallUrl(roomId: string, displayName?: string): string {
@@ -642,6 +673,13 @@ export function MessagesScreen({
         if (callLogRef.current && callLogRef.current.roomId === payload.roomId) {
           callLogRef.current.answeredAt = payload.answeredAt || Date.now();
         }
+        socket.emit("call:join", {
+          conversationId: payload.conversationId,
+          callType: "video",
+          mode: "private",
+          micMuted: false,
+          cameraOff: false,
+        });
         void openVideoCallRoom(payload.roomId, openName).catch((err) => {
           Alert.alert(
             "Khong the mo cuoc goi video",
@@ -738,6 +776,8 @@ export function MessagesScreen({
     socket.on("call:offer", onCallOffer);
     socket.on("call:answer", onCallAnswer);
     socket.on("call:end", onCallEnd);
+    // Backend emits "call:ended" (with "d") from endActiveCallRoom — listen to both.
+    socket.on("call:ended", onCallEnd);
     socket.on("call:reject", onCallReject);
     socket.on("call:unavailable", onCallUnavailable);
     socket.on("connect", onSocketConnect);
@@ -749,6 +789,7 @@ export function MessagesScreen({
       socket.off("call:offer", onCallOffer);
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
+      socket.off("call:ended", onCallEnd);
       socket.off("call:reject", onCallReject);
       socket.off("call:unavailable", onCallUnavailable);
       socket.off("connect", onSocketConnect);
@@ -1311,7 +1352,7 @@ export function MessagesScreen({
       return;
     }
 
-    const roomId = buildCallRoomId(String(selectedConv.id), Number(user.id));
+    const roomId = await acquireCallRoom(socket, String(selectedConv.id));
     const payload: CallPayload = {
       conversationId: String(selectedConv.id),
       roomId,
@@ -1387,6 +1428,13 @@ export function MessagesScreen({
       answeredAt: Date.now(),
       // Báo cho bên gọi (có thể là web đang WebRTC) chuyển sang mở Jitsi cùng phòng.
       useJitsi: true,
+    });
+    socket.emit("call:join", {
+      conversationId: payload.conversationId,
+      callType: "video",
+      mode: payload.mode || "private",
+      micMuted: false,
+      cameraOff: false,
     });
     setIncomingCall(null);
 
