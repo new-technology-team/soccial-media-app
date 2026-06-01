@@ -211,6 +211,13 @@ export function UserProfileScreen({
 
   const showReportButton = relationship !== "self";
   const canMessage = relationship === "friends";
+  const isOnline = (() => {
+    const raw = profile.lastActiveAt;
+    if (!raw) return false;
+    const ts = new Date(raw).getTime();
+    if (Number.isNaN(ts)) return false;
+    return Date.now() - ts < 5 * 60 * 1000;
+  })();
 
   return (
     <View className="flex-1 bg-background">
@@ -223,8 +230,30 @@ export function UserProfileScreen({
           <View style={{ padding: 16 }}>
             <Card>
               <View className="items-center">
-                <Avatar name={profile.fullName} avatarUrl={profile.avatarUrl} size="lg" />
+                <View>
+                  <Avatar name={profile.fullName} avatarUrl={profile.avatarUrl} size="lg" />
+                  {isOnline ? (
+                    <View
+                      style={{
+                        position: "absolute",
+                        right: 2,
+                        bottom: 2,
+                        width: 16,
+                        height: 16,
+                        borderRadius: 8,
+                        backgroundColor: "#16a34a",
+                        borderWidth: 2,
+                        borderColor: "#ffffff",
+                      }}
+                    />
+                  ) : null}
+                </View>
                 <Text className="mt-3 text-lg font-bold text-foreground">{profile.fullName}</Text>
+                {isOnline ? (
+                  <Text className="text-[11px] text-success font-semibold mt-0.5">
+                    Đang hoạt động
+                  </Text>
+                ) : null}
                 <Text className="text-xs text-muted-foreground mt-1">
                   {profile.email || profile.phone || "Nguoi dung"}
                 </Text>

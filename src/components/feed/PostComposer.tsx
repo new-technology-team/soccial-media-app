@@ -73,6 +73,8 @@ export function PostComposer({
       setMediaUrl("");
       setVisibility("public");
       onClose();
+    } catch {
+      // Lỗi đã được hiển thị Alert ở parent (handlePost); giữ modal mở để không mất nội dung.
     } finally {
       setIsPosting(false);
     }

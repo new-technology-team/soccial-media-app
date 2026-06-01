@@ -68,7 +68,9 @@ export function MyProfileScreen({
 
   useEffect(() => {
     void loadPosts();
-  }, [loadPosts]);
+    // Tải bài đã lưu ngay từ đầu để số liệu "Đã lưu" hiển thị đúng (không chờ mở tab).
+    void loadSavedPosts();
+  }, [loadPosts, loadSavedPosts]);
 
   useEffect(() => {
     if (activeTab === "saved") {

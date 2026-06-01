@@ -471,3 +471,40 @@ Không có `expo-linking` config — không thể mở app từ notification pus
 - Theme/background/auto-delete/khóa-ẩn hội thoại: backend có nhưng chưa làm UI mobile (ít giá trị trên mobile).
 - "Tắt thông báo" và "Tắt tiếng" trong menu hơi trùng vai trò (đều ảnh hưởng `notificationsEnabled`) — giữ cả hai vì là 2 endpoint backend khác nhau.
 - Cần kiểm thử realtime trên thiết bị thật/dev build với 2 tài khoản (logic & type đã verify; chưa chạy app thật).
+
+---
+
+## 12. Báo Cáo Kỹ Thuật — Sửa Bug Bảng Tin / Khám Phá / Hồ Sơ (2026-06-01)
+
+> Rà soát 3 khu vực Bảng tin (Feed), Khám phá (Explore/Search), Hồ sơ (Profile) bằng cách đối chiếu mã
+> mobile với backend NestJS. **Đợt này các endpoint REST đều khớp (không 404)** — bug nằm ở
+> **realtime/logic/UX**. Đã verify: `post`/`comment` reaction backend không whitelist type (không lỗi);
+> `user.controller` trả `lastActiveAt` nhưng `mapAuthUser` mobile bỏ field.
+
+### 12.1 Bug đã vá
+
+| # | Khu vực | Lỗi | Nguyên nhân | Cách sửa | File |
+|---|---------|-----|-------------|----------|------|
+| F1 | Bảng tin | Realtime feed chết (bài/bình luận mới của người khác không tự hiện) | Mobile nghe `post:new`/`comment:new`; backend phát `post:created/updated/deleted` + `comment:created` qua `emitSocialEvent` (broadcast toàn cục) | Đăng ký đúng tên sự kiện (vẫn debounce `loadFeed`) | `FeedScreen.tsx` |
+| F2 | Bảng tin | Footer "cuộn xuống để tải lại" gây hiểu nhầm (không có `onEndReached`); biến `isLoadingMore` chết | Code stub chưa hoàn thiện | Bỏ text sai → "Kéo xuống để làm mới"; xóa `isLoadingMore` | `FeedScreen.tsx` |
+| F3 | Bảng tin | Đăng bài lỗi → cảnh báo "unhandled promise rejection" | `handlePost` rethrow để giữ modal mở nhưng `PostComposer.handleSubmit` không catch | Bọc `onPost` trong try/catch (nuốt lỗi đã Alert), chỉ đóng modal khi thành công | `PostComposer.tsx` |
+| E1 | Khám phá | Nút Thích/Chia sẻ/Lưu/Menu ở "Thịnh hành" là nút chết; trạng thái "Đã thích" sai | `PostCard` dùng `currentUserId={0}` + handlers rỗng `() => {}` | Truyền `user` thật; wire `handleLike`/`handleReact`/`handleSave` (tái dùng pattern Feed), Bình luận/Chia sẻ → mở bài, Menu → báo cáo | `SearchScreen.tsx`, `App.tsx` |
+| P1 | Hồ sơ | Số "Đã lưu" luôn 0 cho tới khi mở tab "Đã lưu" | `savedPosts` chỉ load khi `activeTab==='saved'` | Load `listSavedPosts` ngay khi mount (tab vẫn refresh khi mở) | `MyProfileScreen.tsx` |
+| P2 | Hồ sơ | Thiếu chỉ báo trực tuyến trên hồ sơ người khác | `mapAuthUser` bỏ `lastActiveAt` | Thêm `lastActiveAt` vào `AuthUser` + map trong `api.ts`; chấm xanh + "Đang hoạt động" khi `< 5 phút` | `UserProfileScreen.tsx`, `types/auth.ts`, `api.ts` |
+
+### 12.2 Công nghệ & cách áp dụng
+- **Socket.IO realtime feed:** dùng đúng tên sự kiện backend (`post:created/updated/deleted`, `comment:created`) + debounce 450ms gọi `loadFeed` để gộp nhiều cập nhật.
+- **Tái dùng pattern reaction/save của Feed cho Explore:** `reactPost`/`unreactPost`/`savePost`/`unsavePost`, cập nhật state tại chỗ (`replacePost` đồng bộ cả `trendingPosts` lẫn kết quả tìm kiếm).
+- **Tính trạng thái online client-side:** so `lastActiveAt` với `Date.now()` ngưỡng 5 phút (giống profile web), ẩn khi không có dữ liệu (tôn trọng quyền riêng tư "hiển thị lần cuối hoạt động").
+
+### 12.3 Tối ưu đã đạt được
+- Bảng tin **tự cập nhật realtime** thật (trước đây hoàn toàn không chạy) — không phải kéo refresh thủ công.
+- Khám phá **tương tác đầy đủ** (thích/emoji/lưu/báo cáo) thay vì nút chết gây nhầm lẫn.
+- Loại bỏ cảnh báo unhandled rejection và UI gây hiểu nhầm; số liệu hồ sơ chính xác ngay khi mở.
+- `npx tsc --noEmit` pass; không dùng `any` ngoài ranh giới payload.
+
+### 12.4 Giới hạn còn lại (không phải bug, không sửa)
+- Tìm **bài viết** ở Khám phá lọc client-side trên `listFeed` (backend chưa có endpoint search post).
+- "Ẩn bài viết" chỉ lưu cục bộ (backend không có hide cho user) → mất sau khi tải lại.
+- Bài viết trong hồ sơ (mình & người khác) hiển thị dạng dòng tóm tắt, không phải `PostCard` đầy đủ (chạm để mở chi tiết) — chủ ý giữ gọn.
+- Cần kiểm thử realtime feed trên thiết bị thật/dev build với 2 tài khoản (logic & type đã verify).

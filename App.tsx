@@ -214,6 +214,7 @@ export default function App() {
       case "search":
         return (
           <SearchScreen
+            user={user}
             onOpenPost={openPostInFeed}
             onOpenUserProfile={openUserProfile}
             onOpenAIChat={() => openAIChat("search")}

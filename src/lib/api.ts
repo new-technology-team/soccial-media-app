@@ -332,6 +332,10 @@ function mapAuthUser(raw: any): AuthUser {
     role: raw?.role,
     accountStatus: raw?.accountStatus || raw?.status,
     createdAt: raw?.createdAt ? String(raw.createdAt) : undefined,
+    lastActiveAt:
+      raw?.lastActiveAt || raw?.last_active_at
+        ? String(raw.lastActiveAt || raw.last_active_at)
+        : null,
   };
 }
 

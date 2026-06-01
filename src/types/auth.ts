@@ -10,6 +10,7 @@ export type AuthUser = {
   role?: string;
   accountStatus?: string;
   createdAt?: string;
+  lastActiveAt?: string | null;
 };
 
 export type AuthTokens = {

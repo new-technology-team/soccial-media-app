@@ -54,7 +54,6 @@ export function FeedScreen({
   const [showComposer, setShowComposer] = useState(false);
   const [composerMode, setComposerMode] = useState<"create" | "edit">("create");
   const [editingPost, setEditingPost] = useState<FeedPost | null>(null);
-  const isLoadingMore = false;
   const [hiddenPostIds, setHiddenPostIds] = useState<Record<string, boolean>>(
     {},
   );
@@ -136,12 +135,17 @@ export function FeedScreen({
       }, 450);
     };
 
-    socket.on("post:new", refreshFromRealtime);
-    socket.on("comment:new", refreshFromRealtime);
+    // Backend phát các sự kiện này (emitSocialEvent broadcast toàn cục).
+    socket.on("post:created", refreshFromRealtime);
+    socket.on("post:updated", refreshFromRealtime);
+    socket.on("post:deleted", refreshFromRealtime);
+    socket.on("comment:created", refreshFromRealtime);
 
     return () => {
-      socket.off("post:new", refreshFromRealtime);
-      socket.off("comment:new", refreshFromRealtime);
+      socket.off("post:created", refreshFromRealtime);
+      socket.off("post:updated", refreshFromRealtime);
+      socket.off("post:deleted", refreshFromRealtime);
+      socket.off("comment:created", refreshFromRealtime);
       socket.emit("leave-feed");
       if (realtimeRefreshTimerRef.current) {
         clearTimeout(realtimeRefreshTimerRef.current);
@@ -459,19 +463,13 @@ export function FeedScreen({
           />
         }
         ListFooterComponent={
-          isLoadingMore ? (
-            <View className="items-center py-4">
-              <Text className="text-xs text-muted-foreground">
-                Dang tai lai bang tin...
-              </Text>
-            </View>
-          ) : (
+          visiblePosts.length > 0 ? (
             <View className="items-center py-3">
               <Text className="text-[11px] text-muted-foreground">
-                Cuon xuong cuoi de tai lai bai viet moi
+                Keo xuong de lam moi bang tin
               </Text>
             </View>
-          )
+          ) : null
         }
         ListHeaderComponent={
           <>
