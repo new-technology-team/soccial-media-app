@@ -18,6 +18,24 @@ interface MessageBubbleProps {
   onLongPress?: (message: Message) => void;
   onOpenPost?: (postId: string) => void;
   translatedText?: string;
+  isGroup?: boolean;
+  showSeen?: boolean;
+}
+
+const STICKER_ICON_GLYPHS: Record<string, string> = {
+  "icon:smile": "🙂", "icon:smile-plus": "😄", "icon:heart": "❤️",
+  "icon:sparkles": "✨", "icon:flame": "🔥", "icon:party": "🎉",
+  "icon:rocket": "🚀", "icon:star": "⭐", "icon:like": "👍",
+  "icon:thanks": "🤝", "icon:strong": "💪", "icon:zap": "⚡",
+  "icon:badge-check": "✅", "icon:question": "❓", "icon:sticker": "🎴",
+  "icon:file": "📎",
+};
+
+function stickerGlyph(token: string): string {
+  const raw = String(token || "").trim();
+  if (raw.startsWith("emoji:")) return raw.slice(6) || "🙂";
+  if (STICKER_ICON_GLYPHS[raw]) return STICKER_ICON_GLYPHS[raw];
+  return raw || "🙂";
 }
 
 export function MessageBubble({
@@ -26,6 +44,8 @@ export function MessageBubble({
   onLongPress,
   onOpenPost,
   translatedText,
+  isGroup,
+  showSeen,
 }: MessageBubbleProps) {
   const { width: screenWidth } = useWindowDimensions();
   const isSystem = message.type === "system" || Number(message.senderId) === 0;
@@ -60,6 +80,13 @@ export function MessageBubble({
     );
   }
 
+  const isSticker = message.type === "sticker" && !message.isRecalled;
+  const stickerValue = isSticker
+    ? stickerGlyph(String((message.meta as any)?.sticker || message.content || ""))
+    : "";
+  const seenReaders = (message.readBy || []).filter(
+    (r) => Number(r.userId) !== Number(currentUserId),
+  );
   const textValue = message.isRecalled
     ? "Tin nhan da duoc thu hoi"
     : message.content;
@@ -104,11 +131,15 @@ export function MessageBubble({
         style={{ maxWidth: "76%", minWidth: 72 }}
       >
         <View
-          className={`rounded-2xl px-4 py-3 ${
-            isMe
-              ? "bg-primary rounded-br-sm"
-              : "bg-surface border border-border rounded-bl-sm"
-          }`}
+          className={
+            isSticker
+              ? "px-1 py-1"
+              : `rounded-2xl px-4 py-3 ${
+                  isMe
+                    ? "bg-primary rounded-br-sm"
+                    : "bg-surface border border-border rounded-bl-sm"
+                }`
+          }
         >
           {message.replyTo && (
             <View
@@ -143,6 +174,10 @@ export function MessageBubble({
               {message.senderName}
             </Text>
           )}
+
+          {isSticker ? (
+            <Text style={{ fontSize: 56, lineHeight: 64 }}>{stickerValue}</Text>
+          ) : null}
 
           {message.type === "image" && message.mediaUrl ? (
             <Image
@@ -232,7 +267,7 @@ export function MessageBubble({
             </TouchableOpacity>
           ) : null}
 
-          {!!textValue && !hidePlaceholderText ? (
+          {!isSticker && !!textValue && !hidePlaceholderText ? (
             <Text
               className={`text-sm ${
                 message.isRecalled
@@ -258,12 +293,18 @@ export function MessageBubble({
           ) : null}
 
           <Text
-            className={`text-[10px] mt-1 ${isMe ? "text-white/70" : "text-muted-foreground"} self-end`}
+            className={`text-[10px] mt-1 ${isMe && !isSticker ? "text-white/70" : "text-muted-foreground"} self-end`}
           >
             {message.isPinned ? "📌 Đã ghim • " : ""}
             {formatTime(message.createdAt)}
           </Text>
         </View>
+
+        {isMe && showSeen && seenReaders.length > 0 ? (
+          <Text className="text-[10px] text-muted-foreground self-end mt-0.5 mr-1">
+            {isGroup ? `Đã xem (${seenReaders.length})` : "Đã xem"}
+          </Text>
+        ) : null}
 
         {/* Reactions */}
         {message.reactions && message.reactions.length > 0 && (

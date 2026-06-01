@@ -13,12 +13,18 @@ export type Conversation = {
   directPeerId?: number | null;
   isBlockedByMe?: boolean;
   isBlockedMe?: boolean;
+  isPinned?: boolean;
+  isMuted?: boolean;
+  mutedUntil?: string | null;
   members?: Array<{
     userId: number;
     fullName: string;
     avatarUrl?: string | null;
     role?: string;
     notificationsEnabled?: boolean;
+    nickname?: string | null;
+    lastReadAt?: string | null;
+    lastReadMessageId?: string | null;
   }>;
   participants?: Array<{ userId: number; name: string; avatarUrl?: string }>;
 };
@@ -38,6 +44,7 @@ export type Message = {
   isRecalled?: boolean;
   isRemovedForMe?: boolean;
   isPinned?: boolean;
+  readBy?: Array<{ userId: number; at?: string }>;
   replyTo?: {
     id: string;
     senderId: number;

@@ -396,6 +396,11 @@ function mapConversation(raw: any): Conversation {
       member?.notificationsEnabled === undefined
         ? undefined
         : Boolean(member.notificationsEnabled),
+    nickname: member?.nickname ? String(member.nickname) : null,
+    lastReadAt: member?.lastReadAt ? String(member.lastReadAt) : null,
+    lastReadMessageId: member?.lastReadMessageId
+      ? String(member.lastReadMessageId)
+      : null,
   }));
 
   return {
@@ -421,6 +426,12 @@ function mapConversation(raw: any): Conversation {
         : Number(raw?.directPeerId),
     isBlockedByMe: Boolean(raw?.isBlockedByMe ?? false),
     isBlockedMe: Boolean(raw?.isBlockedMe ?? false),
+    isPinned: Boolean(raw?.isPinned ?? raw?.pinned ?? false),
+    isMuted: Boolean(raw?.isMuted ?? raw?.muted ?? false),
+    mutedUntil:
+      raw?.mutedUntil === undefined || raw?.mutedUntil === null
+        ? null
+        : String(raw.mutedUntil),
     members,
     participants,
   };
@@ -499,6 +510,12 @@ function mapMessage(raw: any): Message {
     isRecalled: Boolean(raw?.isRecalled),
     isRemovedForMe: Boolean(raw?.isRemovedForMe),
     isPinned: Boolean(raw?.isPinned),
+    readBy: Array.isArray(raw?.readBy)
+      ? raw.readBy.map((r: any) => ({
+          userId: Number(r?.userId || 0),
+          at: r?.at ? String(r.at) : undefined,
+        }))
+      : [],
     replyTo: raw?.replyTo ? {
       id: String(raw.replyTo.id || raw.replyTo._id || ""),
       senderId: Number(raw.replyTo.senderId || 0),
@@ -824,12 +841,81 @@ export const api = {
     ),
 
   // Messages
-  listMessages: (conversationId: string | number) =>
-    request<{ messages: any[] }>(
-      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages`,
+  listMessages: (
+    conversationId: string | number,
+    opts?: {
+      q?: string;
+      limit?: number;
+      beforeId?: string;
+      senderId?: number;
+      type?: string;
+    },
+  ) => {
+    const query = new URLSearchParams();
+    if (opts?.q) query.set("q", opts.q);
+    if (opts?.limit) query.set("limit", String(opts.limit));
+    if (opts?.beforeId) query.set("beforeId", opts.beforeId);
+    if (opts?.senderId) query.set("senderId", String(opts.senderId));
+    if (opts?.type) query.set("type", opts.type);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    return request<{ messages: any[] }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages${suffix}`,
     ).then((res) => ({
       messages: (res.messages || []).map(mapMessage),
-    })),
+    }));
+  },
+
+  markConversationRead: (
+    conversationId: string | number,
+    lastReadMessageId?: string,
+  ) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages/read`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(
+          lastReadMessageId ? { lastReadMessageId } : {},
+        ),
+      },
+    ),
+
+  clearConversationMessages: (conversationId: string | number) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages`,
+      { method: "DELETE" },
+    ),
+
+  pinConversation: (conversationId: string | number, pinned: boolean) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/pin`,
+      { method: pinned ? "PATCH" : "DELETE" },
+    ),
+
+  muteConversation: (
+    conversationId: string | number,
+    muted: boolean,
+    mutedUntil?: string | null,
+  ) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/mute`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ muted, mutedUntil: mutedUntil ?? null }),
+      },
+    ),
+
+  updateConversationNickname: (
+    conversationId: string | number,
+    userId: number,
+    nickname: string | null,
+  ) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/members/${encodeURIComponent(String(userId))}/nickname`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ nickname }),
+      },
+    ),
 
   sendMessage: (conversationId: string | number, content: string) =>
     request<{ message: any }>(
@@ -850,6 +936,7 @@ export const api = {
       fileSize?: number;
       meta?: Record<string, any> | null;
       replyToId?: string;
+      sticker?: string;
     },
   ) =>
     request<{ message: any }>(
@@ -1206,16 +1293,29 @@ export const api = {
       },
     ),
 
-  changeGroupMemberRole: (
+  // Đặt/bỏ phó nhóm: userId để đặt, null để bỏ phó (PATCH /:id/deputy)
+  setGroupDeputy: (
     conversationId: string | number,
-    userId: number,
-    role: "leader" | "deputy" | "member",
+    userId: number | null,
   ) =>
     request<{ message: string }>(
-      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/members/${encodeURIComponent(String(userId))}/role`,
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/deputy`,
       {
         method: "PATCH",
-        body: JSON.stringify({ role }),
+        body: JSON.stringify({ userId }),
+      },
+    ),
+
+  // Chuyển quyền trưởng nhóm (PATCH /:id/leader)
+  transferGroupLeader: (
+    conversationId: string | number,
+    userId: number,
+  ) =>
+    request<{ message: string }>(
+      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/leader`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ userId }),
       },
     ),
 

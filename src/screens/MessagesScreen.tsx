@@ -38,6 +38,31 @@ import type { MessagesScreenProps } from "./messages/types";
 const DEFAULT_API_URL = "http://10.0.2.2:5000";
 const DEFAULT_VIDEO_CALL_BASE_URL = "https://meet.jit.si";
 
+// Bộ sticker emoji — trùng token với web (STICKER_EMOJI_TOKENS) để liên thông.
+const STICKER_TOKENS: string[] = [
+  "emoji:🤩", "emoji:🥰", "emoji:😂", "emoji:🥹",
+  "emoji:🔥", "emoji:🎉", "emoji:🚀", "emoji:🌈",
+  "emoji:👏", "emoji:🙌", "emoji:💪", "emoji:🤝",
+  "emoji:✅", "emoji:❓", "emoji:💡", "emoji:📎",
+];
+
+// Sticker icon-token từ web (icon:*) → emoji gần nghĩa để hiển thị trên mobile.
+const STICKER_ICON_FALLBACK: Record<string, string> = {
+  "icon:smile": "🙂", "icon:smile-plus": "😄", "icon:heart": "❤️",
+  "icon:sparkles": "✨", "icon:flame": "🔥", "icon:party": "🎉",
+  "icon:rocket": "🚀", "icon:star": "⭐", "icon:like": "👍",
+  "icon:thanks": "🤝", "icon:strong": "💪", "icon:zap": "⚡",
+  "icon:badge-check": "✅", "icon:question": "❓", "icon:sticker": "🎴",
+  "icon:file": "📎",
+};
+
+export function resolveStickerGlyph(token: string): string {
+  const raw = String(token || "").trim();
+  if (raw.startsWith("emoji:")) return raw.slice(6) || "🙂";
+  if (STICKER_ICON_FALLBACK[raw]) return STICKER_ICON_FALLBACK[raw];
+  return raw || "🙂";
+}
+
 type CallPayload = {
   conversationId: string;
   roomId: string;
@@ -255,6 +280,17 @@ export function MessagesScreen({
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [peerIsTyping, setPeerIsTyping] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peerTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isMessageSearchOpen, setIsMessageSearchOpen] = useState(false);
+  const [messageSearchKeyword, setMessageSearchKeyword] = useState("");
+  const [messageSearchResults, setMessageSearchResults] = useState<Message[]>([]);
+  const [isSearchingMessages, setIsSearchingMessages] = useState(false);
+  const [showStickerPanel, setShowStickerPanel] = useState(false);
+  const [nicknameDialog, setNicknameDialog] = useState<{
+    userId: number;
+    fullName: string;
+  } | null>(null);
+  const [nicknameInput, setNicknameInput] = useState("");
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [renameGroupInput, setRenameGroupInput] = useState("");
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -375,6 +411,8 @@ export function MessagesScreen({
       );
       await loadMessages(conversation.id);
       scrollMessagesToEnd(false);
+      // Đánh dấu đã đọc trên server (reset unread thật + báo "đã xem" cho thành viên khác).
+      void api.markConversationRead(conversation.id).catch(() => undefined);
     },
     [loadMessages, scrollMessagesToEnd],
   );
@@ -565,6 +603,15 @@ export function MessagesScreen({
           return [...prev, normalized];
         });
         scrollMessagesToEnd();
+        // Hội thoại đang mở + tin của người khác → đánh dấu đã đọc ngay trên server.
+        if (
+          normalized.conversationId === activeConversationIdRef.current &&
+          Number(normalized.senderId) !== Number(user.id)
+        ) {
+          void api
+            .markConversationRead(normalized.conversationId, normalized.id)
+            .catch(() => undefined);
+        }
       }
 
       setConversations((prev) => {
@@ -802,17 +849,82 @@ export function MessagesScreen({
       }
     };
 
-    const onTypingStart = (payload: any) => {
-      if (
-        Number(payload?.userId) !== Number(user.id) &&
-        String(payload?.conversationId) === String(activeConversationIdRef.current)
-      ) {
-        setPeerIsTyping(true);
+    // Backend emit "message:typing" { conversationId, fromUserId, isTyping }
+    const onMessageTyping = (payload: any) => {
+      const fromUserId = Number(payload?.fromUserId ?? payload?.userId ?? 0);
+      if (!fromUserId || fromUserId === Number(user.id)) return;
+      if (String(payload?.conversationId) !== String(activeConversationIdRef.current)) return;
+
+      const isTyping = payload?.isTyping !== false;
+      setPeerIsTyping(isTyping);
+
+      if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+      if (isTyping) {
+        // Tự tắt khi không nhận thêm sự kiện (tránh kẹt "Đang soạn tin...").
+        peerTypingTimeoutRef.current = setTimeout(() => setPeerIsTyping(false), 4000);
       }
     };
     const onTypingStop = (payload: any) => {
-      if (Number(payload?.userId) !== Number(user.id)) {
-        setPeerIsTyping(false);
+      const fromUserId = Number(payload?.fromUserId ?? payload?.userId ?? 0);
+      if (fromUserId && fromUserId === Number(user.id)) return;
+      if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+      setPeerIsTyping(false);
+    };
+
+    const onMessageSeen = (payload: any) => {
+      const messageId = String(payload?.messageId || "");
+      const seenUserId = Number(payload?.userId || 0);
+      const conversationId = String(payload?.conversationId || "");
+      if (!messageId || !seenUserId) return;
+      if (!activeJoinedConversationIdsRef.current.includes(conversationId)) return;
+      if (seenUserId === Number(user.id)) return;
+      const seenAt = payload?.seenAt ? String(payload.seenAt) : new Date().toISOString();
+      setMessages((prev) =>
+        prev.map((item) => {
+          if (item.id !== messageId) return item;
+          const readBy = Array.isArray(item.readBy) ? [...item.readBy] : [];
+          if (readBy.some((r) => Number(r.userId) === seenUserId)) return item;
+          readBy.push({ userId: seenUserId, at: seenAt });
+          return { ...item, readBy };
+        }),
+      );
+    };
+
+    // Đồng bộ thay đổi nhóm do người khác thực hiện (đổi tên/role/avatar, mute…).
+    const onConversationUpdated = (payload: any) => {
+      const convId = String(
+        payload?.conversation?.id || payload?.conversationId || "",
+      );
+      if (convId && convId === activeConversationIdRef.current) {
+        void loadConversationDetail(convId);
+      }
+      void loadConversations();
+    };
+
+    // Thêm/xóa/rời thành viên.
+    const onConversationMembers = (payload: any) => {
+      const convId = String(
+        payload?.conversationId || payload?.conversation?.id || "",
+      );
+      if (!convId) return;
+      const removedMe =
+        payload?.action === "removed" &&
+        Number(payload?.userId) === Number(user.id);
+      if (removedMe && convId === activeConversationIdRef.current) {
+        setSelectedConv(null);
+        setConversationDetail(null);
+        setMessages([]);
+      } else if (convId === activeConversationIdRef.current) {
+        void loadConversationDetail(convId);
+      }
+      void loadConversations();
+    };
+
+    // Đổi biệt danh thành viên.
+    const onConversationNickname = (payload: any) => {
+      const convId = String(payload?.conversationId || "");
+      if (convId && convId === activeConversationIdRef.current) {
+        void loadConversationDetail(convId);
       }
     };
 
@@ -828,8 +940,13 @@ export function MessagesScreen({
     socket.on("call:reject", onCallReject);
     socket.on("call:unavailable", onCallUnavailable);
     socket.on("connect", onSocketConnect);
-    socket.on("typing:start", onTypingStart);
-    socket.on("typing:stop", onTypingStop);
+    socket.on("message:typing", onMessageTyping);
+    socket.on("typing", onMessageTyping);
+    socket.on("stopTyping", onTypingStop);
+    socket.on("message:seen", onMessageSeen);
+    socket.on("conversation:updated", onConversationUpdated);
+    socket.on("conversation:members", onConversationMembers);
+    socket.on("conversation:nickname", onConversationNickname);
     return () => {
       socket.off("message:new", onMessageNew);
       socket.off("message:updated", onMessageUpdated);
@@ -842,10 +959,16 @@ export function MessagesScreen({
       socket.off("call:reject", onCallReject);
       socket.off("call:unavailable", onCallUnavailable);
       socket.off("connect", onSocketConnect);
-      socket.off("typing:start", onTypingStart);
-      socket.off("typing:stop", onTypingStop);
+      socket.off("message:typing", onMessageTyping);
+      socket.off("typing", onMessageTyping);
+      socket.off("stopTyping", onTypingStop);
+      socket.off("message:seen", onMessageSeen);
+      socket.off("conversation:updated", onConversationUpdated);
+      socket.off("conversation:members", onConversationMembers);
+      socket.off("conversation:nickname", onConversationNickname);
     };
   }, [
+    loadConversationDetail,
     loadConversations,
     logCall,
     markMessageEventHandled,
@@ -937,8 +1060,10 @@ export function MessagesScreen({
 
   useEffect(() => {
     setPeerIsTyping(false);
+    if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
     };
   }, [selectedConv?.id]);
 
@@ -982,14 +1107,23 @@ export function MessagesScreen({
       if (!socket || !selectedConv) return;
 
       if (text.trim()) {
-        socket.emit("typing:start", { conversationId: selectedConv.id });
+        socket.emit("message:typing", {
+          conversationId: selectedConv.id,
+          isTyping: true,
+        });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = setTimeout(() => {
-          socket.emit("typing:stop", { conversationId: selectedConv.id });
+          socket.emit("message:typing", {
+            conversationId: selectedConv.id,
+            isTyping: false,
+          });
         }, 2500);
       } else {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        socket.emit("typing:stop", { conversationId: selectedConv.id });
+        socket.emit("message:typing", {
+          conversationId: selectedConv.id,
+          isTyping: false,
+        });
       }
     },
     [selectedConv],
@@ -1786,7 +1920,9 @@ export function MessagesScreen({
       const isMe = member.userId === Number(user.id);
       const amLeader = myMemberRole === "leader";
       const amDeputy = myMemberRole === "deputy";
-      if (isMe || (!amLeader && !amDeputy)) return;
+      // Đặt biệt danh: mọi thành viên đều được (backend chỉ yêu cầu là thành viên).
+      // Quản trị (phân quyền/xóa): chỉ leader/deputy.
+      if (isMe) return;
 
       const options: Array<{
         text: string;
@@ -1794,13 +1930,27 @@ export function MessagesScreen({
         onPress?: () => void;
       }> = [{ text: "Huy", style: "cancel" }];
 
+      options.push({
+        text: "Dat biet danh",
+        onPress: () => {
+          setNicknameInput(
+            String(
+              (activeConversation.members || []).find(
+                (m) => Number(m.userId) === Number(member.userId),
+              )?.nickname || "",
+            ),
+          );
+          setNicknameDialog({ userId: member.userId, fullName: member.fullName });
+        },
+      });
+
       if (amLeader) {
         if (member.role !== "deputy") {
           options.push({
             text: "Phan quyen Pho nhom",
             onPress: async () => {
               try {
-                await api.changeGroupMemberRole(selectedConv.id, member.userId, "deputy");
+                await api.setGroupDeputy(selectedConv.id, member.userId);
                 await loadConversationDetail(selectedConv.id);
               } catch (err) {
                 Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
@@ -1812,7 +1962,7 @@ export function MessagesScreen({
             text: "Bo quyen Pho nhom",
             onPress: async () => {
               try {
-                await api.changeGroupMemberRole(selectedConv.id, member.userId, "member");
+                await api.setGroupDeputy(selectedConv.id, null);
                 await loadConversationDetail(selectedConv.id);
               } catch (err) {
                 Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
@@ -1820,25 +1970,276 @@ export function MessagesScreen({
             },
           });
         }
+
+        options.push({
+          text: "Chuyen quyen truong nhom",
+          onPress: () => {
+            Alert.alert(
+              "Chuyen quyen truong nhom",
+              `Chuyen quyen truong nhom cho ${member.fullName}? Ban se tro thanh thanh vien thuong.`,
+              [
+                { text: "Huy", style: "cancel" },
+                {
+                  text: "Chuyen quyen",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      await api.transferGroupLeader(selectedConv.id, member.userId);
+                      await loadConversationDetail(selectedConv.id);
+                    } catch (err) {
+                      Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        });
       }
 
-      options.push({
-        text: "Xoa khoi nhom",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await api.removeGroupMember(selectedConv.id, member.userId);
-            await loadConversationDetail(selectedConv.id);
-          } catch (err) {
-            Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
-          }
-        },
-      });
+      if (amLeader || amDeputy) {
+        options.push({
+          text: "Xoa khoi nhom",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.removeGroupMember(selectedConv.id, member.userId);
+              await loadConversationDetail(selectedConv.id);
+            } catch (err) {
+              Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+            }
+          },
+        });
+      }
 
       Alert.alert(member.fullName, "Chon hanh dong", options);
     },
-    [activeConversation?.isGroup, loadConversationDetail, myMemberRole, selectedConv, user.id],
+    [activeConversation, loadConversationDetail, myMemberRole, selectedConv, user.id],
   );
+
+  const handleSaveNickname = useCallback(async () => {
+    if (!selectedConv || !nicknameDialog) return;
+    const value = nicknameInput.trim();
+    try {
+      await api.updateConversationNickname(
+        selectedConv.id,
+        nicknameDialog.userId,
+        value ? value : null,
+      );
+      setNicknameDialog(null);
+      setNicknameInput("");
+      await loadConversationDetail(selectedConv.id);
+    } catch (err) {
+      Alert.alert(
+        "Khong the dat biet danh",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    }
+  }, [loadConversationDetail, nicknameDialog, nicknameInput, selectedConv]);
+
+  // B2 — Tìm kiếm tin nhắn trong hội thoại (debounce qua server, dùng listMessages?q=).
+  useEffect(() => {
+    if (!isMessageSearchOpen || !selectedConv?.id) {
+      setMessageSearchResults([]);
+      return;
+    }
+    const keyword = messageSearchKeyword.trim();
+    if (!keyword) {
+      setMessageSearchResults([]);
+      setIsSearchingMessages(false);
+      return;
+    }
+    let cancelled = false;
+    setIsSearchingMessages(true);
+    const handle = setTimeout(() => {
+      void api
+        .listMessages(selectedConv.id, { q: keyword })
+        .then((res) => {
+          if (!cancelled) setMessageSearchResults(res.messages || []);
+        })
+        .catch(() => {
+          if (!cancelled) setMessageSearchResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearchingMessages(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [isMessageSearchOpen, messageSearchKeyword, selectedConv?.id]);
+
+  // Đóng tìm kiếm khi đổi hội thoại.
+  useEffect(() => {
+    setIsMessageSearchOpen(false);
+    setMessageSearchKeyword("");
+    setMessageSearchResults([]);
+    setShowStickerPanel(false);
+  }, [selectedConv?.id]);
+
+  const isMessageSearchActive =
+    isMessageSearchOpen && messageSearchKeyword.trim().length > 0;
+  const displayedMessages = isMessageSearchActive ? messageSearchResults : messages;
+
+  // B1 — tin cuối do mình gửi đã được người khác xem (hiển thị "Đã xem").
+  const lastSeenOwnMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (Number(m.senderId) !== Number(user.id)) continue;
+      const readers = (m.readBy || []).filter(
+        (r) => Number(r.userId) !== Number(user.id),
+      );
+      if (readers.length > 0) return m.id;
+    }
+    return null;
+  }, [messages, user.id]);
+
+  // B5 — map nickname theo userId để hiển thị tên người gửi.
+  const memberNicknameMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const m of activeConversation?.members || []) {
+      if (m.nickname && String(m.nickname).trim()) {
+        map[Number(m.userId)] = String(m.nickname).trim();
+      }
+    }
+    return map;
+  }, [activeConversation?.members]);
+
+  const handleSendSticker = useCallback(
+    async (token: string) => {
+      if (!selectedConv) return;
+      setShowStickerPanel(false);
+      const optimisticId = `local-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+      const optimistic: Message = {
+        id: optimisticId,
+        conversationId: selectedConv.id,
+        senderId: Number(user.id),
+        senderName: user.fullName || "Nguoi dung",
+        content: token,
+        type: "sticker",
+        createdAt: new Date().toISOString(),
+        mediaUrl: "",
+        fileName: "",
+        fileSize: 0,
+        meta: { sticker: token },
+        isRecalled: false,
+      };
+      setMessages((prev) => [...prev, optimistic]);
+      scrollMessagesToEnd();
+      try {
+        const res = await api.sendMessagePayload(selectedConv.id, {
+          type: "sticker",
+          text: token,
+          sticker: token,
+        });
+        setMessages((prev) => {
+          const withoutOptimistic = prev.filter((item) => item.id !== optimisticId);
+          if (withoutOptimistic.some((item) => item.id === res.message.id)) {
+            return withoutOptimistic;
+          }
+          return [...withoutOptimistic, res.message];
+        });
+        scrollMessagesToEnd();
+      } catch (err) {
+        setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
+        Alert.alert(
+          "Khong the gui sticker",
+          err instanceof Error ? err.message : "Vui long thu lai",
+        );
+      }
+    },
+    [scrollMessagesToEnd, selectedConv, user.fullName, user.id],
+  );
+
+  const handleTogglePinConversation = useCallback(async () => {
+    if (!selectedConv) return;
+    const next = !activeConversation?.isPinned;
+    setIsMutatingConversation(true);
+    try {
+      await api.pinConversation(selectedConv.id, next);
+      setShowConversationMenu(false);
+      await loadConversationDetail(selectedConv.id);
+      void loadConversations();
+    } catch (err) {
+      Alert.alert(
+        "Khong the cap nhat ghim",
+        err instanceof Error ? err.message : "Vui long thu lai",
+      );
+    } finally {
+      setIsMutatingConversation(false);
+    }
+  }, [activeConversation?.isPinned, loadConversationDetail, loadConversations, selectedConv]);
+
+  const handleMuteConversation = useCallback(() => {
+    if (!selectedConv) return;
+    const convId = selectedConv.id;
+    const applyMute = async (muted: boolean, hours: number | null) => {
+      setIsMutatingConversation(true);
+      try {
+        const mutedUntil =
+          muted && hours
+            ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
+            : null;
+        await api.muteConversation(convId, muted, mutedUntil);
+        setShowConversationMenu(false);
+        await loadConversationDetail(convId);
+        void loadConversations();
+      } catch (err) {
+        Alert.alert(
+          "Khong the cap nhat tat tieng",
+          err instanceof Error ? err.message : "Vui long thu lai",
+        );
+      } finally {
+        setIsMutatingConversation(false);
+      }
+    };
+
+    if (activeConversation?.isMuted) {
+      void applyMute(false, null);
+      return;
+    }
+    Alert.alert("Tat tieng hoi thoai", "Chon thoi gian tat tieng", [
+      { text: "1 gio", onPress: () => void applyMute(true, 1) },
+      { text: "8 gio", onPress: () => void applyMute(true, 8) },
+      { text: "Vo thoi han", onPress: () => void applyMute(true, null) },
+      { text: "Huy", style: "cancel" },
+    ]);
+  }, [activeConversation?.isMuted, loadConversationDetail, loadConversations, selectedConv]);
+
+  const handleClearHistory = useCallback(() => {
+    if (!selectedConv) return;
+    const convId = selectedConv.id;
+    Alert.alert(
+      "Xoa lich su tro chuyen",
+      "Toan bo tin nhan se bi xoa khoi phia ban (nguoi khac van thay).",
+      [
+        { text: "Huy", style: "cancel" },
+        {
+          text: "Xoa",
+          style: "destructive",
+          onPress: async () => {
+            setIsMutatingConversation(true);
+            try {
+              await api.clearConversationMessages(convId);
+              setMessages([]);
+              setShowConversationMenu(false);
+              void loadConversations();
+            } catch (err) {
+              Alert.alert(
+                "Khong the xoa lich su",
+                err instanceof Error ? err.message : "Vui long thu lai",
+              );
+            } finally {
+              setIsMutatingConversation(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [loadConversations, selectedConv]);
 
   return (
     <View className="flex-1 bg-background">
@@ -1866,6 +2267,30 @@ export function MessagesScreen({
             </TouchableOpacity>
           ) : (
             <View className="flex-row items-center">
+              <TouchableOpacity
+                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${isMessageSearchOpen
+                  ? "bg-primary border-primary"
+                  : "bg-surface-secondary border-border"
+                  }`}
+                onPress={() => {
+                  setIsMessageSearchOpen((prev) => {
+                    const next = !prev;
+                    if (!next) {
+                      setMessageSearchKeyword("");
+                      setMessageSearchResults([]);
+                    }
+                    return next;
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="search"
+                  size={16}
+                  color={isMessageSearchOpen ? "#ffffff" : "#374151"}
+                />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${canStartVideoCall
                   ? "bg-primary border-primary"
@@ -1899,6 +2324,34 @@ export function MessagesScreen({
           )
         }
       />
+
+      {selectedConv && isMessageSearchOpen ? (
+        <View className="flex-row items-center px-3 py-2 bg-surface border-b border-border">
+          <Feather name="search" size={16} color="#6b7280" />
+          <TextInput
+            className="flex-1 mx-2 text-sm text-foreground"
+            value={messageSearchKeyword}
+            onChangeText={setMessageSearchKeyword}
+            placeholder="Tim tin nhan trong hoi thoai..."
+            placeholderTextColor="#9ca3af"
+            autoFocus
+            returnKeyType="search"
+          />
+          {isSearchingMessages ? (
+            <ActivityIndicator size="small" color="#0052ce" />
+          ) : messageSearchKeyword ? (
+            <TouchableOpacity
+              onPress={() => {
+                setMessageSearchKeyword("");
+                setMessageSearchResults([]);
+              }}
+              className="p-1"
+            >
+              <Feather name="x" size={16} color="#6b7280" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
 
       {selectedConv && (() => {
         const pinnedMessage = messages.find(m => m.isPinned);
@@ -2004,14 +2457,18 @@ export function MessagesScreen({
         >
           <FlatList
             ref={messageListRef}
-            data={messages}
+            data={displayedMessages}
             keyExtractor={(item) => String(item.id)}
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="interactive"
             renderItem={({ item }) => {
               let resolvedItem = item;
               const activeConv = conversationDetail || selectedConv;
-              if (
+              // Ưu tiên biệt danh; nếu không có thì lấy tên thật từ member khi thiếu.
+              const nickname = memberNicknameMap[Number(item.senderId)];
+              if (nickname) {
+                resolvedItem = { ...item, senderName: nickname };
+              } else if (
                 activeConv &&
                 (item.senderName === `Người dùng #${item.senderId}` ||
                   item.senderName.startsWith("Người dùng #") ||
@@ -2031,11 +2488,24 @@ export function MessagesScreen({
                   onLongPress={handleLongPressMessage}
                   onOpenPost={onOpenPost}
                   translatedText={translatedMessages[String(item.id)]}
+                  isGroup={Boolean(activeConversation?.isGroup)}
+                  showSeen={!isMessageSearchActive && item.id === lastSeenOwnMessageId}
                 />
               );
             }}
+            ListEmptyComponent={
+              isMessageSearchActive ? (
+                <View className="py-10 items-center">
+                  <Text className="text-sm text-muted-foreground">
+                    {isSearchingMessages
+                      ? "Dang tim..."
+                      : "Khong tim thay tin nhan phu hop"}
+                  </Text>
+                </View>
+              ) : null
+            }
             onContentSizeChange={() => {
-              scrollMessagesToEnd();
+              if (!isMessageSearchActive) scrollMessagesToEnd();
             }}
             contentContainerStyle={{
               paddingVertical: 12,
@@ -2097,6 +2567,30 @@ export function MessagesScreen({
                 </TouchableOpacity>
               </View>
             )}
+            {showStickerPanel && (
+              <View
+                style={{
+                  backgroundColor: "#f8fafc",
+                  borderTopWidth: 1,
+                  borderTopColor: "#e5e7eb",
+                  paddingVertical: 10,
+                  paddingHorizontal: 8,
+                }}
+              >
+                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                  {STICKER_TOKENS.map((token) => (
+                    <TouchableOpacity
+                      key={token}
+                      onPress={() => { void handleSendSticker(token); }}
+                      style={{ width: "12.5%", alignItems: "center", paddingVertical: 8 }}
+                      activeOpacity={0.6}
+                    >
+                      <Text style={{ fontSize: 28 }}>{resolveStickerGlyph(token)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <TouchableOpacity
                 onPress={() => { void handleGetSuggestions(); }}
@@ -2109,6 +2603,20 @@ export function MessagesScreen({
                 ) : (
                   <Feather name="zap" size={20} color="#0052ce" />
                 )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setShowStickerPanel((prev) => !prev);
+                }}
+                style={{ paddingHorizontal: 6, paddingVertical: 10 }}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name="smile"
+                  size={20}
+                  color={showStickerPanel ? "#0052ce" : "#6b7280"}
+                />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <MessageInput
@@ -2303,6 +2811,51 @@ export function MessagesScreen({
         </View>
       </Modal>
 
+      {/* Nickname Modal */}
+      <Modal
+        visible={Boolean(nicknameDialog)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNicknameDialog(null)}
+      >
+        <View className="flex-1 bg-black/35 items-center justify-center px-6">
+          <View className="w-full rounded-2xl bg-surface border border-border p-5">
+            <Text className="text-base font-bold text-foreground mb-1">
+              Dat biet danh
+            </Text>
+            <Text className="text-xs text-muted-foreground mb-3">
+              {nicknameDialog?.fullName}
+            </Text>
+            <TextInput
+              className="h-11 border border-border rounded-xl px-3 text-sm text-foreground bg-surface-secondary mb-4"
+              value={nicknameInput}
+              onChangeText={setNicknameInput}
+              placeholder="Nhap biet danh (de trong de xoa)..."
+              placeholderTextColor="#9ca3af"
+              maxLength={60}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => { void handleSaveNickname(); }}
+            />
+            <View className="flex-row">
+              <TouchableOpacity
+                className="flex-1 h-11 rounded-xl border border-border items-center justify-center mr-2"
+                onPress={() => setNicknameDialog(null)}
+              >
+                <Text className="text-sm font-semibold text-muted-foreground">Huy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-1 h-11 rounded-xl items-center justify-center ml-2 bg-primary"
+                onPress={() => { void handleSaveNickname(); }}
+                activeOpacity={0.85}
+              >
+                <Text className="text-white font-semibold text-sm">Luu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Emoji Reaction Picker */}
       <Modal
         visible={Boolean(emojiPickerMessage)}
@@ -2352,7 +2905,9 @@ export function MessagesScreen({
             <FlatList
               data={conversations}
               keyExtractor={(item) => String(item.id)}
-              renderItem={({ item }) => (
+              renderItem={({ item }) => {
+                const displayName = resolveConvDisplayName(item, user.id);
+                return (
                 <TouchableOpacity
                   className="flex-row items-center py-3 border-b border-border"
                   onPress={() => { void handleForwardMessage(item.id); }}
@@ -2361,11 +2916,11 @@ export function MessagesScreen({
                 >
                   <View className="w-9 h-9 rounded-full bg-surface-secondary items-center justify-center mr-3">
                     <Text className="text-sm font-semibold text-foreground">
-                      {String(item.name || "?").slice(0, 1).toUpperCase()}
+                      {String(displayName || "?").slice(0, 1).toUpperCase()}
                     </Text>
                   </View>
                   <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
-                    {item.name || "Cuoc tro chuyen"}
+                    {displayName}
                   </Text>
                   {isForwarding ? (
                     <ActivityIndicator size="small" color="#0052ce" />
@@ -2373,7 +2928,8 @@ export function MessagesScreen({
                     <Feather name="send" size={16} color="#0052ce" />
                   )}
                 </TouchableOpacity>
-              )}
+                );
+              }}
               ListEmptyComponent={
                 <View className="py-6 items-center">
                   <Text className="text-sm text-muted-foreground">Chua co cuoc tro chuyen nao</Text>
@@ -2583,6 +3139,42 @@ export function MessagesScreen({
             <TouchableOpacity
               className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
               onPress={() => {
+                void handleTogglePinConversation();
+              }}
+              disabled={isMutatingConversation}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name="bookmark"
+                size={16}
+                color={activeConversation?.isPinned ? "#0052ce" : "#111827"}
+              />
+              <Text className="ml-3 text-sm font-medium text-foreground">
+                {activeConversation?.isPinned
+                  ? "Bo ghim hoi thoai"
+                  : "Ghim hoi thoai"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+              onPress={handleMuteConversation}
+              disabled={isMutatingConversation}
+              activeOpacity={0.8}
+            >
+              <Feather
+                name={activeConversation?.isMuted ? "volume-2" : "volume-x"}
+                size={16}
+                color="#111827"
+              />
+              <Text className="ml-3 text-sm font-medium text-foreground">
+                {activeConversation?.isMuted ? "Bo tat tieng" : "Tat tieng hoi thoai"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+              onPress={() => {
                 void handleToggleNotifications();
               }}
               disabled={isMutatingConversation}
@@ -2597,6 +3189,18 @@ export function MessagesScreen({
                 {conversationNotificationsEnabled
                   ? "Tat thong bao cuoc tro chuyen"
                   : "Bat thong bao cuoc tro chuyen"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className="h-12 rounded-xl border border-border bg-surface-secondary px-4 mb-2 flex-row items-center"
+              onPress={handleClearHistory}
+              disabled={isMutatingConversation}
+              activeOpacity={0.8}
+            >
+              <Feather name="trash" size={16} color="#111827" />
+              <Text className="ml-3 text-sm font-medium text-foreground">
+                Xoa lich su tro chuyen
               </Text>
             </TouchableOpacity>
 
@@ -2689,13 +3293,11 @@ export function MessagesScreen({
               keyExtractor={(item) => String(item.userId)}
               renderItem={({ item }) => {
                 const isMe = item.userId === Number(user.id);
-                const canManage =
-                  !isMe && (myMemberRole === "leader" || myMemberRole === "deputy");
                 return (
                   <TouchableOpacity
                     className="py-2.5 border-b border-border flex-row items-center justify-between"
                     onLongPress={() => handleMemberLongPress(item)}
-                    activeOpacity={canManage ? 0.7 : 1}
+                    activeOpacity={!isMe ? 0.7 : 1}
                   >
                     <View className="flex-row items-center flex-1">
                       <View className="w-8 h-8 rounded-full bg-surface-secondary items-center justify-center mr-3">
@@ -2706,18 +3308,31 @@ export function MessagesScreen({
                             .toUpperCase()}
                         </Text>
                       </View>
-                      <Text className="text-sm text-foreground flex-1">
-                        {item.fullName}
-                        {isMe ? " (ban)" : ""}
-                      </Text>
+                      <View className="flex-1">
+                        <Text className="text-sm text-foreground">
+                          {item.nickname && item.nickname.trim()
+                            ? item.nickname
+                            : item.fullName}
+                          {isMe ? " (ban)" : ""}
+                        </Text>
+                        {item.nickname && item.nickname.trim() ? (
+                          <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>
+                            {item.fullName}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
                     <View className="flex-row items-center">
                       {item.role ? (
                         <Text className="text-xs text-muted-foreground mr-2">
-                          {item.role}
+                          {item.role === "leader"
+                            ? "Truong nhom"
+                            : item.role === "deputy"
+                              ? "Pho nhom"
+                              : item.role}
                         </Text>
                       ) : null}
-                      {canManage ? (
+                      {!isMe ? (
                         <Feather name="more-vertical" size={14} color="#9ca3af" />
                       ) : null}
                     </View>

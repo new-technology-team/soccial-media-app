@@ -349,10 +349,18 @@ NSMicrophoneUsageDescription  — "ZChat cần microphone cho cuộc gọi"
 | Auth | ✅ Đầy đủ + SMS OTP stub | ✅ Đầy đủ (email OTP) |
 | Feed | ✅ Đầy đủ | ✅ Đầy đủ |
 | Messages realtime | ✅ Socket.IO | ✅ Socket.IO |
-| Group management | ✅ Inline UI | ✅ Modal UI |
+| Typing indicator | ✅ | ✅ (sửa 2026-06-01) |
+| Read receipts ("Đã xem") | ✅ | ✅ (thêm 2026-06-01) |
+| Tìm kiếm tin trong hội thoại | ✅ | ✅ (thêm 2026-06-01) |
+| Ghim / Tắt tiếng hội thoại | ✅ | ✅ (thêm 2026-06-01) |
+| Xóa lịch sử trò chuyện | ✅ | ✅ (thêm 2026-06-01) |
+| Sticker | ✅ packs | ✅ emoji pack (liên thông token) |
+| Biệt danh thành viên | ✅ | ✅ (thêm 2026-06-01) |
+| Group management (đổi tên/role) | ✅ Inline UI | ✅ Modal UI (sửa role 2026-06-01) |
 | Video/Voice call | ✅ WebRTC native | ✅ Jitsi Meet (Linking) |
 | AI features | ✅ Đầy đủ 5 tính năng | ✅ Đầy đủ 5 tính năng |
 | Media gallery | ✅ Lightbox | ✅ 3-tab modal |
+| Theme/Background/Auto-delete hội thoại | ✅ | ❌ Backlog (ít dùng trên mobile) |
 | Admin/Moderator | ✅ Dashboard đầy đủ | ❌ Không có |
 | Responsive | ✅ 3 breakpoints | ✅ Native mobile |
 | Dark mode | ❌ Backlog | ❌ Backlog |
@@ -398,3 +406,68 @@ Không có `expo-linking` config — không thể mở app từ notification pus
 | Trung bình | Deep Linking (`expo-linking`) | Trung bình | Notification tap → mở đúng màn hình |
 | Thấp | Dark Mode | Trung bình | NativeWind hỗ trợ sẵn `dark:` prefix |
 | Thấp | Admin/Moderator screens | Cao | Ít dùng trên mobile |
+| Thấp | Theme/Background/Auto-delete/Lock hội thoại | Trung bình | Backend đã hỗ trợ; ít giá trị trên mobile |
+
+---
+
+## 11. Báo Cáo Kỹ Thuật — Sửa Bug & Đồng Bộ Tính Năng Nhắn Tin (2026-06-01)
+
+> Mục tiêu đợt này: vá triệt để các lỗi nhắn tin (chat 1-1 + nhóm), lỗi UX/UI, và bổ sung để phần
+> nhắn tin mobile **ngang bằng web**. Phương pháp: đối chiếu trực tiếp mã mobile với
+> controller/socket backend NestJS thay vì tin tài liệu — nhiều endpoint/sự kiện mobile được clone
+> không khớp backend nên tính năng 404/không chạy dù trước đó đánh dấu "✅".
+
+### 11.1 Công nghệ đã áp dụng & cách áp dụng
+
+| Công nghệ | Áp dụng cho tính năng | Cách áp dụng |
+|-----------|----------------------|--------------|
+| **Socket.IO client** (`socket.io-client` 4.8) | Typing indicator, read receipts, đồng bộ nhóm realtime | Đăng ký listener trong `useEffect` của `MessagesScreen`, cleanup bằng `socket.off`. Sự kiện chuẩn hóa theo đúng backend: `message:typing` (`{conversationId, fromUserId, isTyping}`), `message:seen`, `conversation:updated/members/nickname`. |
+| **REST qua XHR** (`src/lib/api.ts`) | mark-read, role nhóm, pin/mute/clear, nickname, search | Thêm method mới, path đối chiếu 1-1 với `conversation.controller.ts` / `message.controller.ts`. Tự refresh JWT khi 401. |
+| **JWT decode tại client** | Xác định `viewerReacted`, người gửi | `getCurrentUserId()` decode payload base64 của access token (đã có sẵn). |
+| **Optimistic UI + reconcile** | Gửi text/sticker | Chèn tin `local-*` ngay, thay bằng tin server trả về; rollback khi lỗi (đã dùng cho text, mở rộng cho sticker). |
+| **Debounce** (`setTimeout`) | Tìm kiếm tin trong hội thoại | `useEffect` debounce 350ms gọi `listMessages(convId, {q})`; hủy bằng cờ `cancelled`. |
+| **Token-based sticker** | Sticker liên thông web↔mobile | Dùng đúng token `emoji:🔥`/`icon:heart` của web; gửi `{type:'sticker', text, sticker}`; render glyph (map `icon:*` → emoji gần nghĩa). |
+| **`useMemo`/`useCallback`** | Read-receipt, nickname map, handlers | Tính `lastSeenOwnMessageId`, `memberNicknameMap` bằng `useMemo`; handler bọc `useCallback` đúng deps. |
+
+### 11.2 Bug đã vá
+
+| # | Lỗi (chat 1-1 & nhóm) | Nguyên nhân | Cách sửa |
+|---|----------------------|-------------|----------|
+| A1 | "Đang soạn tin..." không bao giờ hiện; typing không sang web | Mobile emit/nghe `typing:start`/`typing:stop` + field `userId`; backend chỉ có `message:typing`/`typing`/`stopTyping` + `fromUserId` | Đổi emit/nghe sang `message:typing`, đọc `fromUserId` |
+| A2 | Typing kẹt vĩnh viễn khi mất sự kiện stop | Không có timeout | Tự `setPeerIsTyping(false)` sau 4s, reset mỗi sự kiện |
+| A3 | Phân quyền phó nhóm / chuyển trưởng nhóm → 404 | Gọi `/members/:id/role` (không tồn tại) | Dùng `/deputy` (`setGroupDeputy`), `/leader` (`transferGroupLeader`); thêm UI chuyển trưởng nhóm |
+| A4 | Unread không reset trên server, không ai thấy "đã xem" | Mobile chưa từng gọi mark-read | Thêm `markConversationRead`, gọi khi mở hội thoại + khi có tin mới |
+| A5 | Forward picker hiện "Cuoc tro chuyen" cho chat 1-1 | Dùng `item.name` (null với direct) | Dùng `resolveConvDisplayName(item, userId)` |
+| A6 | Thay đổi nhóm của người khác (đổi tên/role/thêm-xóa thành viên/biệt danh) không cập nhật realtime | Mobile không nghe `conversation:updated/members/nickname` | Thêm 3 listener → reload chi tiết + danh sách; tự đóng hội thoại khi mình bị kick |
+
+### 11.3 Tính năng bổ sung (parity với web)
+
+- **Read receipts ("Đã xem"):** map `readBy` trên message + `lastReadAt`/`lastReadMessageId` trên member; nghe `message:seen`; nhãn "Đã xem"/"Đã xem (n)" dưới tin cuối mình gửi đã được người khác đọc.
+- **Tìm kiếm tin trong hội thoại:** nút kính lúp ở header → ô tìm, lọc server-side qua `listMessages?q=`.
+- **Ghim / Tắt tiếng (1h/8h/vô hạn) / Xóa lịch sử:** thêm mục trong menu hội thoại (`/pin`, `/mute`, `DELETE .../messages`). Backend tự đẩy hội thoại đã ghim lên đầu danh sách.
+- **Sticker:** panel lưới emoji, gửi/nhận liên thông web; render không bong bóng, glyph lớn 56px.
+- **Biệt danh thành viên:** long-press thành viên → "Đặt biệt danh" (mọi thành viên đặt được); hiển thị biệt danh trong bong bóng tin & danh sách thành viên.
+
+### 11.4 Tối ưu đã đạt được
+
+- **Khớp hợp đồng API/sự kiện với backend:** loại bỏ toàn bộ call 404 trong luồng nhắn tin (role, typing) — tính năng chạy thật thay vì "✅ trên giấy".
+- **Giảm tải mạng khi tìm kiếm:** debounce 350ms + hủy request cũ (cờ `cancelled`) tránh gọi API mỗi ký tự.
+- **Realtime nhất quán mobile↔web↔mobile:** dùng đúng tên sự kiện chuẩn của backend nên 3 chiều (web–web, mobile–mobile, web–mobile) cùng nhận typing/seen/biến động nhóm.
+- **Optimistic + dedup:** sticker/text hiển thị tức thì; chống trùng tin bằng `markMessageEventHandled` và kiểm tra `id` khi reconcile.
+- **Tự phục hồi trạng thái nhóm:** khi bị kick khỏi nhóm đang mở, tự thoát hội thoại (tránh thao tác trên nhóm đã rời → lỗi).
+- **Type-safe:** mở rộng `Conversation`/`Message` (readBy, lastRead*, nickname, isPinned/isMuted), `npx tsc --noEmit` pass, không dùng `any` ngoài ranh giới payload socket.
+
+### 11.5 Sự kiện Socket đang dùng (sau khi chuẩn hóa)
+
+**Lắng nghe (nhận từ server):** `message:new`, `message:updated`, `message:reaction`, `message:deleted`,
+`message:typing` + `typing`/`stopTyping`, `message:seen`, `conversation:updated`, `conversation:members`,
+`conversation:nickname`, các sự kiện call (`call:offer/answer/end/ended/reject/unavailable`).
+
+**Phát đi (gửi lên server):** `join-conversation`/`leave-conversation`, `message:typing`,
+`call:offer/answer/join/end/reject`, `call:room:acquire`.
+
+### 11.6 Giới hạn còn lại (không blocking)
+
+- Theme/background/auto-delete/khóa-ẩn hội thoại: backend có nhưng chưa làm UI mobile (ít giá trị trên mobile).
+- "Tắt thông báo" và "Tắt tiếng" trong menu hơi trùng vai trò (đều ảnh hưởng `notificationsEnabled`) — giữ cả hai vì là 2 endpoint backend khác nhau.
+- Cần kiểm thử realtime trên thiết bị thật/dev build với 2 tài khoản (logic & type đã verify; chưa chạy app thật).
