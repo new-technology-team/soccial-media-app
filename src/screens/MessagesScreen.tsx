@@ -253,7 +253,6 @@ export function MessagesScreen({
   const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
   const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [peerIsTyping, setPeerIsTyping] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -265,6 +264,9 @@ export function MessagesScreen({
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
   const [forwardTargetMessage, setForwardTargetMessage] = useState<Message | null>(null);
   const [isForwarding, setIsForwarding] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
+  const [actionMenuMessage, setActionMenuMessage] = useState<Message | null>(null);
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({});
   const [showGallery, setShowGallery] = useState(false);
   const messageListRef = useRef<FlatList<Message> | null>(null);
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
@@ -618,6 +620,49 @@ export function MessagesScreen({
       );
     };
 
+    const onMessageReaction = (payload: any) => {
+      const msgPayload = payload?.message;
+      if (!msgPayload) return;
+      const normalized = api.mapMessage(msgPayload);
+      if (!normalized.id || !normalized.conversationId) return;
+
+      const eventKey = `reaction:${normalized.conversationId}:${normalized.id}:${JSON.stringify(normalized.reactions)}`;
+      if (!markMessageEventHandled(eventKey)) return;
+
+      const activeJoinedConversationIds = activeJoinedConversationIdsRef.current;
+      const isInActiveJoinedRoom = activeJoinedConversationIds.includes(
+        normalized.conversationId,
+      );
+
+      if (isInActiveJoinedRoom) {
+        setMessages((prev) =>
+          prev.map((item) =>
+            item.id === normalized.id
+              ? { ...item, reactions: normalized.reactions }
+              : item,
+          ),
+        );
+      }
+    };
+
+    const onMessageDeleted = (payload: any) => {
+      const messageId = String(payload?.messageId || "");
+      if (!messageId) return;
+      const conversationId = String(payload?.conversationId || "");
+
+      const eventKey = `delete:${conversationId}:${messageId}`;
+      if (!markMessageEventHandled(eventKey)) return;
+
+      const activeJoinedConversationIds = activeJoinedConversationIdsRef.current;
+      const isInActiveJoinedRoom = activeJoinedConversationIds.includes(
+        conversationId,
+      );
+
+      if (isInActiveJoinedRoom) {
+        setMessages((prev) => prev.filter((item) => item.id !== messageId));
+      }
+    };
+
     const onCallOffer = (raw: any) => {
       const payload: CallPayload = {
         conversationId: String(raw?.conversationId || "").trim(),
@@ -773,6 +818,8 @@ export function MessagesScreen({
 
     socket.on("message:new", onMessageNew);
     socket.on("message:updated", onMessageUpdated);
+    socket.on("message:reaction", onMessageReaction);
+    socket.on("message:deleted", onMessageDeleted);
     socket.on("call:offer", onCallOffer);
     socket.on("call:answer", onCallAnswer);
     socket.on("call:end", onCallEnd);
@@ -786,6 +833,8 @@ export function MessagesScreen({
     return () => {
       socket.off("message:new", onMessageNew);
       socket.off("message:updated", onMessageUpdated);
+      socket.off("message:reaction", onMessageReaction);
+      socket.off("message:deleted", onMessageDeleted);
       socket.off("call:offer", onCallOffer);
       socket.off("call:answer", onCallAnswer);
       socket.off("call:end", onCallEnd);
@@ -870,13 +919,11 @@ export function MessagesScreen({
   }, [messages.length, scrollMessagesToEnd, selectedConv?.id]);
 
   useEffect(() => {
-    const onShow = (e: { endCoordinates: { height: number } }) => {
+    const onShow = () => {
       setIsKeyboardVisible(true);
-      setKeyboardHeight(e.endCoordinates.height);
     };
     const onHide = () => {
       setIsKeyboardVisible(false);
-      setKeyboardHeight(0);
     };
 
     const showSub = Keyboard.addListener('keyboardDidShow', onShow);
@@ -970,14 +1017,17 @@ export function MessagesScreen({
       isRecalled: false,
     };
 
+    const replyId = replyToMessage?.id ?? undefined;
     setMessages((prev) => [...prev, optimisticMessage]);
     setMessageText("");
+    setReplyToMessage(null);
     scrollMessagesToEnd();
 
     try {
       const res = await api.sendMessagePayload(selectedConv.id, {
         type: "text",
         text,
+        ...(replyId !== undefined ? { replyToId: replyId } : {}),
       });
       setMessages((prev) => {
         const withoutOptimistic = prev.filter((item) => item.id !== optimisticId);
@@ -998,6 +1048,7 @@ export function MessagesScreen({
   }, [
     isUploadingAttachment,
     messageText,
+    replyToMessage,
     scrollMessagesToEnd,
     selectedConv,
     user.fullName,
@@ -1032,63 +1083,73 @@ export function MessagesScreen({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
+        mediaTypes: ["images", "videos"],
         quality: 0.5,
         base64: true,
+        videoMaxDuration: 120,
       });
 
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
+      const isVideo = asset.type === "video";
+
       const base64 = await ensureBase64Data({
         base64: (asset as any).base64,
         uri: asset.uri,
       });
       if (!base64) {
-        Alert.alert("Khong the gui anh", "Khong doc duoc du lieu anh.");
+        Alert.alert(isVideo ? "Khong the gui video" : "Khong the gui anh", "Khong doc duoc du lieu.");
         return;
       }
 
+      const sizeLimit = isVideo ? 50 * 1024 * 1024 : 12 * 1024 * 1024;
       const approxBytes = Math.floor((base64.length * 3) / 4);
-      if (approxBytes > 12 * 1024 * 1024) {
-        Alert.alert("Anh qua lon", "Vui long chon anh nho hon 12MB.");
+      if (approxBytes > sizeLimit) {
+        Alert.alert(isVideo ? "Video qua lon" : "Anh qua lon", `Vui long chon ${isVideo ? "video nho hon 50MB" : "anh nho hon 12MB"}.`);
         return;
       }
 
       setIsUploadingAttachment(true);
       const ext = getExtensionFromMimeType(asset.mimeType);
+      const defaultMime = isVideo ? "video/mp4" : "image/jpeg";
       const uploaded = await api.uploadChatFileBase64(selectedConv.id, {
-        fileName: asset.fileName || `chat-image-${Date.now()}.${ext}`,
-        contentType: asset.mimeType || "image/jpeg",
+        fileName: asset.fileName || `chat-${isVideo ? "video" : "image"}-${Date.now()}.${ext}`,
+        contentType: asset.mimeType || defaultMime,
         base64Data: base64,
       });
 
       if (!uploaded.fileUrl) {
-        throw new Error("Upload anh that bai");
+        throw new Error(`Upload ${isVideo ? "video" : "anh"} that bai`);
       }
 
+      const replyId = replyToMessage?.id ?? undefined;
       const res = await api.sendMessagePayload(selectedConv.id, {
-        type: "image",
+        type: isVideo ? "video" : "image",
         text: messageText.trim() || "",
         mediaUrl: uploaded.fileUrl,
         fileName: uploaded.fileName,
         fileSize: uploaded.size,
-        meta: {
-          width: Number(asset.width || 0),
-          height: Number(asset.height || 0),
-        },
+        meta: isVideo
+          ? { duration: Number((asset as any).duration || 0) }
+          : { width: Number(asset.width || 0), height: Number(asset.height || 0) },
+        ...(replyId !== undefined ? { replyToId: replyId } : {}),
       });
-      setMessages((prev) => [...prev, res.message]);
+      setMessages((prev) => {
+        if (prev.some((item) => item.id === res.message.id)) return prev;
+        return [...prev, res.message];
+      });
       setMessageText("");
+      setReplyToMessage(null);
       scrollMessagesToEnd();
     } catch (err) {
       Alert.alert(
-        "Khong the gui anh",
+        "Khong the gui",
         err instanceof Error ? err.message : "Vui long thu lai",
       );
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [messageText, scrollMessagesToEnd, selectedConv]);
+  }, [messageText, replyToMessage, scrollMessagesToEnd, selectedConv]);
 
   const handlePickFile = useCallback(async () => {
     if (!selectedConv) return;
@@ -1128,15 +1189,21 @@ export function MessagesScreen({
         throw new Error("Upload tep that bai");
       }
 
+      const replyId = replyToMessage?.id ?? undefined;
       const res = await api.sendMessagePayload(selectedConv.id, {
         type: "file",
         text: messageText.trim() || "",
         mediaUrl: uploaded.fileUrl,
         fileName: uploaded.fileName || asset.name || "tep-dinh-kem",
         fileSize: uploaded.size || approxBytes,
+        ...(replyId !== undefined ? { replyToId: replyId } : {}),
       });
-      setMessages((prev) => [...prev, res.message]);
+      setMessages((prev) => {
+        if (prev.some((item) => item.id === res.message.id)) return prev;
+        return [...prev, res.message];
+      });
       setMessageText("");
+      setReplyToMessage(null);
       scrollMessagesToEnd();
     } catch (err) {
       Alert.alert(
@@ -1146,13 +1213,33 @@ export function MessagesScreen({
     } finally {
       setIsUploadingAttachment(false);
     }
-  }, [messageText, scrollMessagesToEnd, selectedConv]);
+  }, [messageText, replyToMessage, scrollMessagesToEnd, selectedConv]);
+
+  // Backend accepts: "like","love","smile","wow","sad","cry","angry"
+  const EMOJI_TYPE_MAP: Record<string, string> = {
+    "👍": "like", "❤️": "love", "😆": "smile",
+    "😮": "wow", "😢": "sad", "😡": "angry",
+  };
 
   const handleReactMessage = useCallback(
     async (message: Message, emoji: string) => {
       setEmojiPickerMessage(null);
+      
       try {
-        const res = await api.reactMessage(message.id, emoji);
+        let res;
+        if (emoji === "🚫") {
+          res = await api.unreactMessage(message.id);
+        } else {
+          const type = EMOJI_TYPE_MAP[emoji] ?? "like";
+          const myExistingReaction = message.reactions?.find((r) => r.viewerReacted);
+
+          if (myExistingReaction && myExistingReaction.type === type) {
+            res = await api.unreactMessage(message.id);
+          } else {
+            res = await api.reactMessage(message.id, type);
+          }
+        }
+
         if (res.message?.id) {
           setMessages((prev) =>
             prev.map((item) => (item.id === res.message!.id ? res.message! : item)),
@@ -1162,6 +1249,7 @@ export function MessagesScreen({
         /* silent — reaction không critical */
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -1185,85 +1273,32 @@ export function MessagesScreen({
     [forwardTargetMessage],
   );
 
+  const handleTranslateMessage = useCallback(async (message: Message) => {
+    const text = String(message.content || "").trim();
+    if (!text) return;
+    try {
+      const result = await api.translateMessage(text, "vi");
+      setTranslatedMessages((prev) => ({ ...prev, [String(message.id)]: result.translatedText }));
+    } catch {
+      Alert.alert("Khong the dich", "Vui long thu lai sau.");
+    }
+  }, []);
+
+  const handleDeleteMessage = useCallback(async (message: Message) => {
+    try {
+      await api.deleteMessage(message.id);
+      setMessages((prev) => prev.filter((item) => item.id !== message.id));
+    } catch (err) {
+      Alert.alert("Khong the xoa", err instanceof Error ? err.message : "Vui long thu lai.");
+    }
+  }, []);
+
   const handleLongPressMessage = useCallback(
     (message: Message) => {
       if (!selectedConv || message.isRecalled) return;
-      const isMe = message.senderId === Number(user.id);
-      const hasText = String(message.content || "").trim().length > 0;
-
-      const actions: Array<{
-        text: string;
-        style?: "cancel" | "destructive" | "default";
-        onPress?: () => void;
-      }> = [{ text: "Huy", style: "cancel" }];
-
-      if (hasText) {
-        actions.push({
-          text: "Sao chep noi dung",
-          onPress: () => {
-            void Share.share({ message: String(message.content || "") });
-          },
-        });
-      }
-
-      actions.push({
-        text: "React cam xuc",
-        onPress: () => setEmojiPickerMessage(message),
-      });
-
-      actions.push({
-        text: "Chuyen tiep",
-        onPress: () => setForwardTargetMessage(message),
-      });
-
-      if (isMe) {
-        actions.push({
-          text: "Ghim tin nhan",
-          onPress: async () => {
-            try {
-              await api.pinMessage(message.id);
-            } catch (err) {
-              Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
-            }
-          },
-        });
-
-        actions.push({
-          text: "Thu hoi (chi minh)",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const res = await api.recallMessage(selectedConv.id, message.id, "me");
-              if (res.removed) {
-                setMessages((prev) => prev.filter((item) => item.id !== message.id));
-              }
-            } catch (err) {
-              Alert.alert("Khong the thu hoi", err instanceof Error ? err.message : "Vui long thu lai");
-            }
-          },
-        });
-
-        actions.push({
-          text: "Thu hoi (tat ca)",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const res = await api.recallMessage(selectedConv.id, message.id, "all");
-              if (res.message) {
-                setMessages((prev) =>
-                  prev.map((item) => (item.id === message.id ? res.message! : item)),
-                );
-              }
-            } catch (err) {
-              Alert.alert("Khong the thu hoi", err instanceof Error ? err.message : "Vui long thu lai");
-            }
-          },
-        });
-      }
-
-      Alert.alert("Tin nhan", undefined, actions);
+      setActionMenuMessage(message);
     },
-    [selectedConv, user.id],
+    [selectedConv],
   );
 
   const activeConversation = conversationDetail || selectedConv;
@@ -1865,6 +1900,45 @@ export function MessagesScreen({
         }
       />
 
+      {selectedConv && (() => {
+        const pinnedMessage = messages.find(m => m.isPinned);
+        if (!pinnedMessage) return null;
+        return (
+          <TouchableOpacity 
+            className="flex-row items-center px-4 py-2 bg-indigo-50 border-b border-indigo-100"
+            activeOpacity={0.8}
+            onPress={() => {
+              const idx = messages.findIndex(m => m.id === pinnedMessage.id);
+              if (idx !== -1 && messageListRef.current) {
+                try {
+                  messageListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+                } catch {
+                  // Ignore scroll error if item is not rendered yet
+                }
+              }
+            }}
+          >
+            <Feather name="paperclip" size={14} color="#4f46e5" />
+            <View className="ml-2 flex-1">
+              <Text className="text-xs font-semibold text-indigo-600 mb-0.5">Tin nhan da ghim</Text>
+              <Text className="text-[13px] text-foreground" numberOfLines={1}>
+                {pinnedMessage.type === "image" ? "🖼 Anh" : pinnedMessage.type === "video" ? "📹 Video" : pinnedMessage.type === "file" ? "📎 Tep dinh kem" : String(pinnedMessage.content || "")}
+              </Text>
+            </View>
+            <TouchableOpacity 
+              onPress={() => {
+                void api.unpinMessage(pinnedMessage.id).then(() => {
+                  setMessages(prev => prev.map(m => m.id === pinnedMessage.id ? {...m, isPinned: false} : m));
+                }).catch(() => {});
+              }} 
+              className="p-1"
+            >
+              <Feather name="x" size={16} color="#6b7280" />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        );
+      })()}
+
       {!selectedConv ? (
         <>
           <SearchBar
@@ -1925,8 +1999,8 @@ export function MessagesScreen({
       ) : (
         <KeyboardAvoidingView
           className="flex-1"
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 0}
+          behavior={Platform.OS === "ios" ? "padding" : "padding"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 90}
         >
           <FlatList
             ref={messageListRef}
@@ -1934,14 +2008,32 @@ export function MessagesScreen({
             keyExtractor={(item) => String(item.id)}
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="interactive"
-            renderItem={({ item }) => (
-              <MessageBubble
-                message={item}
-                currentUserId={user.id}
-                onLongPress={handleLongPressMessage}
-                onOpenPost={onOpenPost}
-              />
-            )}
+            renderItem={({ item }) => {
+              let resolvedItem = item;
+              const activeConv = conversationDetail || selectedConv;
+              if (
+                activeConv &&
+                (item.senderName === `Người dùng #${item.senderId}` ||
+                  item.senderName.startsWith("Người dùng #") ||
+                  !item.senderName)
+              ) {
+                const member = (activeConv.members || []).find(
+                  (m) => Number(m.userId) === Number(item.senderId),
+                );
+                if (member?.fullName) {
+                  resolvedItem = { ...item, senderName: member.fullName };
+                }
+              }
+              return (
+                <MessageBubble
+                  message={resolvedItem}
+                  currentUserId={user.id}
+                  onLongPress={handleLongPressMessage}
+                  onOpenPost={onOpenPost}
+                  translatedText={translatedMessages[String(item.id)]}
+                />
+              );
+            }}
             onContentSizeChange={() => {
               scrollMessagesToEnd();
             }}
@@ -1952,9 +2044,7 @@ export function MessagesScreen({
           />
           <View
             style={{
-              marginBottom: isKeyboardVisible
-                ? (Platform.OS === "android" ? keyboardHeight + 8 : 8)
-                : tabBarHeight,
+              marginBottom: isKeyboardVisible ? 8 : tabBarHeight,
             }}
           >
             {aiSuggestions.length > 0 && (
@@ -1966,7 +2056,7 @@ export function MessagesScreen({
               >
                 {aiSuggestions.map((s, i) => (
                   <TouchableOpacity
-                    key={i}
+                    key={`suggestion-${i}-${s.slice(0, 15)}`}
                     onPress={() => { setMessageText(s); setAiSuggestions([]); }}
                     style={{
                       backgroundColor: "#e0e7ff",
@@ -1988,6 +2078,24 @@ export function MessagesScreen({
                   <Feather name="x" size={14} color="#9ca3af" />
                 </TouchableOpacity>
               </ScrollView>
+            )}
+            {replyToMessage && (
+              <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#f0f4ff", borderLeftWidth: 3, borderLeftColor: "#4f46e5", paddingHorizontal: 12, paddingVertical: 6, marginHorizontal: 8, marginBottom: 4, borderRadius: 6 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, color: "#4f46e5", fontWeight: "600", marginBottom: 1 }} numberOfLines={1}>
+                    {replyToMessage.senderName || "Tin nhan"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: "#6b7280" }} numberOfLines={1}>
+                    {replyToMessage.type === "image" ? "🖼 Anh"
+                      : replyToMessage.type === "video" ? "📹 Video"
+                      : replyToMessage.type === "file" ? "📎 Tep dinh kem"
+                      : String(replyToMessage.content || "")}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setReplyToMessage(null)} style={{ padding: 4 }} activeOpacity={0.7}>
+                  <Feather name="x" size={14} color="#9ca3af" />
+                </TouchableOpacity>
+              </View>
             )}
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <TouchableOpacity
@@ -2208,7 +2316,7 @@ export function MessagesScreen({
           onPress={() => setEmojiPickerMessage(null)}
         >
           <View className="bg-surface border border-border rounded-2xl px-5 py-4 flex-row">
-            {(["👍", "❤️", "😆", "😮", "😢", "😡"] as const).map((emoji) => (
+            {(["👍", "❤️", "😆", "😮", "😢", "😡", "🚫"] as const).map((emoji) => (
               <TouchableOpacity
                 key={emoji}
                 className="w-11 h-11 items-center justify-center mx-1"
@@ -2626,6 +2734,176 @@ export function MessagesScreen({
             />
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(actionMenuMessage)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setActionMenuMessage(null)}
+      >
+        <TouchableOpacity 
+          className="flex-1 justify-end bg-black/40"
+          activeOpacity={1}
+          onPress={() => setActionMenuMessage(null)}
+        >
+          <TouchableOpacity 
+            activeOpacity={1} 
+            className="w-full bg-surface rounded-t-3xl pt-2 pb-8 px-4"
+          >
+            <View className="w-12 h-1.5 bg-border rounded-full self-center mb-6" />
+            
+            {actionMenuMessage && (() => {
+              const hasText = String(actionMenuMessage.content || "").trim().length > 0;
+              const isMe = actionMenuMessage.senderId === Number(user.id);
+              
+              return (
+                <ScrollView bounces={false} showsVerticalScrollIndicator={false} className="max-h-[70vh]">
+                  {hasText && (
+                    <TouchableOpacity
+                      className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        void Share.share({ message: String(actionMenuMessage.content || "") });
+                        setActionMenuMessage(null);
+                      }}
+                    >
+                      <Text className="text-[15px] text-foreground font-medium">Sao chep noi dung</Text>
+                      <Feather name="copy" size={20} color="#4b5563" />
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setReplyToMessage(actionMenuMessage);
+                      setActionMenuMessage(null);
+                    }}
+                  >
+                    <Text className="text-[15px] text-foreground font-medium">Tra loi</Text>
+                    <Feather name="corner-up-left" size={20} color="#4b5563" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setEmojiPickerMessage(actionMenuMessage);
+                      setActionMenuMessage(null);
+                    }}
+                  >
+                    <Text className="text-[15px] text-foreground font-medium">React cam xuc</Text>
+                    <Feather name="smile" size={20} color="#4b5563" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setForwardTargetMessage(actionMenuMessage);
+                      setActionMenuMessage(null);
+                    }}
+                  >
+                    <Text className="text-[15px] text-foreground font-medium">Chuyen tiep</Text>
+                    <Feather name="corner-up-right" size={20} color="#4b5563" />
+                  </TouchableOpacity>
+
+                  {hasText && (
+                    <TouchableOpacity
+                      className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        void handleTranslateMessage(actionMenuMessage);
+                        setActionMenuMessage(null);
+                      }}
+                    >
+                      <Text className="text-[15px] text-foreground font-medium">Dich tin nhan</Text>
+                      <Feather name="globe" size={20} color="#4b5563" />
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                    activeOpacity={0.7}
+                    onPress={async () => {
+                      const isPinned = Boolean(actionMenuMessage.isPinned);
+                      try {
+                        if (isPinned) {
+                          await api.unpinMessage(actionMenuMessage.id);
+                          setMessages((prev) =>
+                            prev.map((item) => (item.id === actionMenuMessage.id ? { ...item, isPinned: false } : item)),
+                          );
+                          Alert.alert("Thành công", "Đã bỏ ghim tin nhắn");
+                        } else {
+                          await api.pinMessage(actionMenuMessage.id);
+                          setMessages((prev) =>
+                            prev.map((item) => (item.id === actionMenuMessage.id ? { ...item, isPinned: true } : item)),
+                          );
+                          Alert.alert("Thành công", "Đã ghim tin nhắn");
+                        }
+                      } catch (err) {
+                        Alert.alert("Lỗi", err instanceof Error ? err.message : "Thử lại sau");
+                      }
+                      setActionMenuMessage(null);
+                    }}
+                  >
+                    <Text className="text-[15px] text-foreground font-medium">
+                      {actionMenuMessage.isPinned ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn"}
+                    </Text>
+                    <Feather name={actionMenuMessage.isPinned ? "slash" : "paperclip"} size={20} color="#4b5563" />
+                  </TouchableOpacity>
+
+                  {isMe && (
+                    <TouchableOpacity
+                      className="h-14 flex-row items-center justify-between border-b border-border/50 px-2"
+                      activeOpacity={0.7}
+                      onPress={async () => {
+                        try {
+                          const res = await api.recallMessage(actionMenuMessage.id);
+                          if (res.message) {
+                            setMessages((prev) =>
+                              prev.map((item) => (item.id === actionMenuMessage.id ? res.message! : item)),
+                            );
+                          }
+                        } catch (err) {
+                          Alert.alert("Không thể thu hồi", err instanceof Error ? err.message : "Vui lòng thử lại");
+                        }
+                        setActionMenuMessage(null);
+                      }}
+                    >
+                      <Text className="text-[15px] text-danger font-medium">Thu hồi tin nhắn</Text>
+                      <Feather name="rotate-ccw" size={20} color="#dc2626" />
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    className="h-14 flex-row items-center justify-between px-2"
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      Alert.alert(
+                        "Xóa tin nhắn?",
+                        "Tin nhắn sẽ bị xóa khỏi danh sách của bạn.",
+                        [
+                          { text: "Hủy", style: "cancel" },
+                          { 
+                            text: "Xóa", 
+                            style: "destructive", 
+                            onPress: () => void handleDeleteMessage(actionMenuMessage) 
+                          },
+                        ],
+                      );
+                      setActionMenuMessage(null);
+                    }}
+                  >
+                    <Text className="text-[15px] text-danger font-medium">Xóa tin nhắn</Text>
+                    <Feather name="trash-2" size={20} color="#dc2626" />
+                  </TouchableOpacity>
+                </ScrollView>
+              );
+            })()}
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

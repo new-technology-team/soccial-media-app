@@ -8,6 +8,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
 import type { Message } from "../../types";
 import { formatTime } from "../../utils";
 
@@ -16,6 +17,7 @@ interface MessageBubbleProps {
   currentUserId: number;
   onLongPress?: (message: Message) => void;
   onOpenPost?: (postId: string) => void;
+  translatedText?: string;
 }
 
 export function MessageBubble({
@@ -23,11 +25,17 @@ export function MessageBubble({
   currentUserId,
   onLongPress,
   onOpenPost,
+  translatedText,
 }: MessageBubbleProps) {
   const { width: screenWidth } = useWindowDimensions();
   const isSystem = message.type === "system" || Number(message.senderId) === 0;
   const isMe = message.senderId === currentUserId;
   const imageWidth = Math.min(250, Math.max(180, screenWidth * 0.62));
+
+  const isVideo = message.type === "video" && Boolean(message.mediaUrl);
+  const player = useVideoPlayer((isVideo && message.mediaUrl) ? message.mediaUrl : (null as any), (playerInstance) => {
+    playerInstance.loop = false;
+  });
 
   const sharedPostMeta = useMemo(() => {
     if (message.type !== "share_post") return null;
@@ -102,6 +110,34 @@ export function MessageBubble({
               : "bg-surface border border-border rounded-bl-sm"
           }`}
         >
+          {message.replyTo && (
+            <View
+              style={{
+                borderLeftWidth: 2,
+                borderLeftColor: isMe ? "rgba(255,255,255,0.5)" : "#4f46e5",
+                paddingLeft: 6,
+                marginBottom: 6,
+                opacity: 0.85,
+              }}
+            >
+              <Text
+                style={{ fontSize: 11, fontWeight: "600", color: isMe ? "rgba(255,255,255,0.9)" : "#4f46e5" }}
+                numberOfLines={1}
+              >
+                {message.replyTo.senderName}
+              </Text>
+              <Text
+                style={{ fontSize: 11, color: isMe ? "rgba(255,255,255,0.75)" : "#6b7280" }}
+                numberOfLines={1}
+              >
+                {message.replyTo.type === "image" ? "🖼 Anh"
+                  : message.replyTo.type === "video" ? "📹 Video"
+                  : message.replyTo.type === "file" ? "📎 Tep"
+                  : String(message.replyTo.content || "")}
+              </Text>
+            </View>
+          )}
+
           {!isMe && (
             <Text className="text-primary text-xs font-semibold mb-0.5">
               {message.senderName}
@@ -119,6 +155,20 @@ export function MessageBubble({
                 minHeight: 120,
               }}
               resizeMode="contain"
+            />
+          ) : null}
+
+          {message.type === "video" && message.mediaUrl ? (
+            <VideoView
+              player={player}
+              allowsFullscreen
+              allowsPictureInPicture
+              style={{
+                width: imageWidth,
+                height: 180,
+                borderRadius: 12,
+                marginBottom: 8,
+              }}
             />
           ) : null}
 
@@ -199,12 +249,49 @@ export function MessageBubble({
             </Text>
           ) : null}
 
+          {translatedText ? (
+            <View style={{ marginTop: 4, borderTopWidth: 1, borderTopColor: isMe ? "rgba(255,255,255,0.2)" : "#e5e7eb", paddingTop: 4 }}>
+              <Text style={{ fontSize: 11, color: isMe ? "rgba(255,255,255,0.8)" : "#6b7280", fontStyle: "italic" }}>
+                🌐 {translatedText}
+              </Text>
+            </View>
+          ) : null}
+
           <Text
             className={`text-[10px] mt-1 ${isMe ? "text-white/70" : "text-muted-foreground"} self-end`}
           >
+            {message.isPinned ? "📌 Đã ghim • " : ""}
             {formatTime(message.createdAt)}
           </Text>
         </View>
+
+        {/* Reactions */}
+        {message.reactions && message.reactions.length > 0 && (
+          <View className={`flex-row absolute -bottom-3 ${isMe ? "right-2" : "left-2"}`}>
+            {message.reactions.map((reaction, index) => {
+              let emoji = "👍";
+              if (reaction.type === "love") emoji = "❤️";
+              else if (reaction.type === "smile") emoji = "😆";
+              else if (reaction.type === "wow") emoji = "😮";
+              else if (reaction.type === "sad") emoji = "😢";
+              else if (reaction.type === "angry") emoji = "😡";
+
+              return (
+                <View 
+                  key={`${reaction.type}-${index}`}
+                  className="bg-surface border border-border rounded-full px-1.5 py-0.5 flex-row items-center ml-1"
+                >
+                  <Text style={{ fontSize: 10 }}>{emoji}</Text>
+                  {reaction.count > 1 && (
+                    <Text className="text-[10px] text-muted-foreground font-semibold ml-1">
+                      {reaction.count}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
       </TouchableOpacity>
     </View>
   );

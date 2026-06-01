@@ -1,5 +1,6 @@
 import { authStore } from "./auth";
 import { normalizeServiceUrl } from "./service-url";
+import { Buffer } from "buffer";
 import type {
   AuthUser,
   AuthResponse,
@@ -425,7 +426,64 @@ function mapConversation(raw: any): Conversation {
   };
 }
 
+function getCurrentUserId(): number | null {
+  try {
+    const tokens = authStore.getTokens();
+    const token = tokens?.accessToken;
+    if (!token) return null;
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const payloadBase64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr = Buffer.from(payloadBase64, "base64").toString("utf8");
+    const payload = JSON.parse(jsonStr);
+    return Number(payload.id || payload.userId || payload.sub || 0) || null;
+  } catch {
+    return null;
+  }
+}
+
 function mapMessage(raw: any): Message {
+  const currentUserId = getCurrentUserId();
+  
+  let reactions: Array<{ type: string; count: number; viewerReacted: boolean }> = [];
+  
+  if (Array.isArray(raw?.reactions)) {
+    const isRawList = raw.reactions.some(
+      (r: any) => r && typeof r.userId === "number" && (r.reaction || r.type)
+    );
+    
+    if (isRawList) {
+      const groups: Record<string, { count: number; viewerReacted: boolean }> = {};
+      for (const r of raw.reactions) {
+        const rType = String(r.reaction || r.type || "like");
+        const rUserId = Number(r.userId || 0);
+        const isViewer = currentUserId !== null && rUserId === currentUserId;
+        
+        if (!groups[rType]) {
+          groups[rType] = { count: 0, viewerReacted: false };
+        }
+        groups[rType].count += 1;
+        if (isViewer) {
+          groups[rType].viewerReacted = true;
+        }
+      }
+      reactions = Object.keys(groups).map((type) => ({
+        type,
+        count: groups[type].count,
+        viewerReacted: groups[type].viewerReacted,
+      }));
+    } else {
+      reactions = raw.reactions.map((r: any) => ({
+        type: String(r.type || r.reaction || "like"),
+        count: Number(r.count || 0),
+        viewerReacted: Boolean(
+          r.viewerReacted ||
+          (raw.viewerReaction && raw.viewerReaction === (r.type || r.reaction))
+        ),
+      }));
+    }
+  }
+
   return {
     id: toStringId(raw?.id ?? raw?._id),
     conversationId: toStringId(raw?.conversationId),
@@ -440,6 +498,15 @@ function mapMessage(raw: any): Message {
     createdAt: String(raw?.createdAt || new Date().toISOString()),
     isRecalled: Boolean(raw?.isRecalled),
     isRemovedForMe: Boolean(raw?.isRemovedForMe),
+    isPinned: Boolean(raw?.isPinned),
+    replyTo: raw?.replyTo ? {
+      id: String(raw.replyTo.id || raw.replyTo._id || ""),
+      senderId: Number(raw.replyTo.senderId || 0),
+      senderName: String(raw.replyTo.senderName || "Người dùng"),
+      content: String(raw.replyTo.content ?? raw.replyTo.text ?? ""),
+      type: raw.replyTo.type ? String(raw.replyTo.type) : "text",
+    } : null,
+    reactions,
   };
 }
 
@@ -458,6 +525,7 @@ function mapNotification(raw: any): Notification {
 }
 
 export const api = {
+  mapMessage,
   // Auth
   register: (payload: RegisterPayload) =>
     request<RegisterResponse>("/api/auth/register", {
@@ -781,6 +849,7 @@ export const api = {
       fileName?: string;
       fileSize?: number;
       meta?: Record<string, any> | null;
+      replyToId?: string;
     },
   ) =>
     request<{ message: any }>(
@@ -826,7 +895,7 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ type }),
       },
-    ).then((res) => ({ message: mapMessage((res as any)?.message ?? res) })),
+    ).then((res) => ({ message: mapMessage((res as any)?.chatMessage ?? (res as any)?.message ?? res) })),
 
   unreactMessage: (messageId: string | number) =>
     request<{ message: any }>(
@@ -834,7 +903,7 @@ export const api = {
       {
         method: "DELETE",
       },
-    ).then((res) => ({ message: mapMessage((res as any)?.message ?? res) })),
+    ).then((res) => ({ message: mapMessage((res as any)?.chatMessage ?? res) })),
 
   forwardMessage: (messageId: string | number, targetConversationId: string | number) =>
     request<{ message: any }>(
@@ -858,21 +927,25 @@ export const api = {
     ),
 
   recallMessage: (
-    conversationId: string | number,
     messageId: string | number,
-    scope: "me" | "all",
+    scope?: "me" | "all",
   ) =>
     request<any>(
-      `/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages/${encodeURIComponent(String(messageId))}/recall`,
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}/recall`,
       {
         method: "PATCH",
-        body: JSON.stringify({ scope }),
+        body: JSON.stringify({ scope: scope || "all" }),
       },
     ).then((res) => ({
-      removed: Boolean((res as any)?.removed),
-      id: String((res as any)?.id || (res as any)?.message?.id || messageId),
-      message: (res as any)?.message ? mapMessage((res as any).message) : null,
+      // Backend returns { message: "text", chatMessage: {...} }
+      message: (res as any)?.chatMessage ? mapMessage((res as any).chatMessage) : null,
     })),
+
+  deleteMessage: (messageId: string | number) =>
+    request<{ message: string }>(
+      `/api/chat/messages/${encodeURIComponent(String(messageId))}`,
+      { method: "DELETE" },
+    ),
 
   // Notifications
   notifications: () =>

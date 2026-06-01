@@ -1,9 +1,15 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useVideoPlayer, VideoView } from "expo-video";
 import { Avatar } from "../common/Avatar";
 import type { FeedPost } from "../../types";
 import { formatTime } from "../../utils";
+
+const isVideoUrl = (url: string | null | undefined) => {
+  if (!url) return false;
+  return /\.(mp4|mkv|webm|avi|mov|3gp|m4v)(\?.*)?$/i.test(url);
+};
 
 const REACTIONS = [
   { type: "like",  emoji: "👍" },
@@ -63,6 +69,11 @@ export function PostCard({
   void currentUserId;
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  const isVideo = isVideoUrl(post.mediaUrl);
+  const player = useVideoPlayer((isVideo && post.mediaUrl) ? post.mediaUrl : (null as any), (playerInstance) => {
+    playerInstance.loop = false;
+  });
+
   const handleHeartTap = () => {
     if (showEmojiPicker) {
       setShowEmojiPicker(false);
@@ -102,12 +113,21 @@ export function PostCard({
 
       {/* Media */}
       {post.mediaUrl ? (
-        <Image
-          source={{ uri: post.mediaUrl }}
-          className="w-full rounded-xl mb-4"
-          style={{ height: 200 }}
-          resizeMode="cover"
-        />
+        isVideoUrl(post.mediaUrl) ? (
+          <VideoView
+            style={{ width: "100%", height: 240, borderRadius: 12, marginBottom: 16 }}
+            player={player}
+            allowsFullscreen
+            allowsPictureInPicture
+          />
+        ) : (
+          <Image
+            source={{ uri: post.mediaUrl }}
+            className="w-full rounded-xl mb-4"
+            style={{ height: 200 }}
+            resizeMode="cover"
+          />
+        )
       ) : null}
 
       {/* Stats */}

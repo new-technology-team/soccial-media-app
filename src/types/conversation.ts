@@ -37,6 +37,15 @@ export type Message = {
   createdAt: string;
   isRecalled?: boolean;
   isRemovedForMe?: boolean;
+  isPinned?: boolean;
+  replyTo?: {
+    id: string;
+    senderId: number;
+    senderName: string;
+    content: string;
+    type?: string;
+  } | null;
+  reactions?: Array<{ type: string; count: number; viewerReacted: boolean }>;
 };
 
 export type SendMessagePayload = {
