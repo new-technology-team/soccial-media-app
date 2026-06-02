@@ -96,9 +96,43 @@ export default function App() {
       setActiveTab("messages");
     };
 
+    const onCallAnswered = (payload: any) => {
+      const roomId = String(payload?.roomId || "").trim();
+      const conversationId = String(payload?.conversationId || "").trim();
+      const answeredByUserId = Number(payload?.answeredByUserId || payload?.fromUserId || 0);
+      if (answeredByUserId && answeredByUserId !== Number(user.id)) return;
+
+      setIncomingCallBootstrap((prev) => {
+        if (!prev) return prev;
+        const sameRoom = roomId && prev.roomId === roomId;
+        const sameConversation = conversationId && prev.conversationId === conversationId;
+        return sameRoom || sameConversation ? null : prev;
+      });
+    };
+
+    const onCallClosed = (payload: any) => {
+      const roomId = String(payload?.roomId || "").trim();
+      const conversationId = String(payload?.conversationId || "").trim();
+
+      setIncomingCallBootstrap((prev) => {
+        if (!prev) return prev;
+        const sameRoom = roomId && prev.roomId === roomId;
+        const sameConversation = conversationId && prev.conversationId === conversationId;
+        return sameRoom || sameConversation ? null : prev;
+      });
+    };
+
     socket.on("call:offer", onCallOffer);
+    socket.on("call:answered", onCallAnswered);
+    socket.on("call:end", onCallClosed);
+    socket.on("call:ended", onCallClosed);
+    socket.on("call:reject", onCallClosed);
     return () => {
       socket.off("call:offer", onCallOffer);
+      socket.off("call:answered", onCallAnswered);
+      socket.off("call:end", onCallClosed);
+      socket.off("call:ended", onCallClosed);
+      socket.off("call:reject", onCallClosed);
     };
   }, [user]);
 

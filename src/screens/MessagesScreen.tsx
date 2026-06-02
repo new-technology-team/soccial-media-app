@@ -720,7 +720,7 @@ export function MessagesScreen({
         mode: "video",
       };
 
-      if (!payload.conversationId || !payload.roomId) return;
+      if (!payload.conversationId && !payload.roomId) return;
       if (payload.fromUserId === Number(user.id)) return;
 
       const matchedConversation = conversationsRef.current.find(
@@ -781,6 +781,21 @@ export function MessagesScreen({
       }
     };
 
+    const onCallAnswered = (raw: any) => {
+      const roomId = String(raw?.roomId || "").trim();
+      const conversationId = String(raw?.conversationId || "").trim();
+      const answeredByUserId = Number(raw?.answeredByUserId || raw?.fromUserId || 0);
+      if (answeredByUserId && answeredByUserId !== Number(user.id)) return;
+
+      setIncomingCall((prev) => {
+        if (!prev) return prev;
+        const sameRoom = roomId && prev.payload.roomId === roomId;
+        const sameConversation =
+          conversationId && prev.payload.conversationId === conversationId;
+        return sameRoom || sameConversation ? null : prev;
+      });
+    };
+
     const onCallEnd = (raw: any) => {
       const payload: CallPayload = {
         conversationId: String(raw?.conversationId || "").trim(),
@@ -794,15 +809,20 @@ export function MessagesScreen({
       let outgoingStopped = false;
       setOutgoingCall((prev) => {
         if (!prev) return prev;
-        if (prev.payload.roomId !== payload.roomId) return prev;
+        const sameRoom = payload.roomId && prev.payload.roomId === payload.roomId;
+        const sameConversation =
+          payload.conversationId && prev.payload.conversationId === payload.conversationId;
+        if (!sameRoom && !sameConversation) return prev;
         outgoingStopped = true;
         return null;
       });
 
       setIncomingCall((prev) => {
         if (!prev) return prev;
-        if (prev.payload.roomId !== payload.roomId) return prev;
-        return null;
+        const sameRoom = payload.roomId && prev.payload.roomId === payload.roomId;
+        const sameConversation =
+          payload.conversationId && prev.payload.conversationId === payload.conversationId;
+        return sameRoom || sameConversation ? null : prev;
       });
 
       if (outgoingStopped) {
@@ -817,12 +837,21 @@ export function MessagesScreen({
     // Web/mobile từ chối nay dùng call:reject (phân biệt với call:end).
     const onCallReject = (raw: any) => {
       const roomId = String(raw?.roomId || "").trim();
+      const conversationId = String(raw?.conversationId || "").trim();
       let stopped = false;
       setOutgoingCall((prev) => {
         if (!prev) return prev;
-        if (roomId && prev.payload.roomId !== roomId) return prev;
+        const sameRoom = roomId && prev.payload.roomId === roomId;
+        const sameConversation = conversationId && prev.payload.conversationId === conversationId;
+        if (!sameRoom && !sameConversation) return prev;
         stopped = true;
         return null;
+      });
+      setIncomingCall((prev) => {
+        if (!prev) return prev;
+        const sameRoom = roomId && prev.payload.roomId === roomId;
+        const sameConversation = conversationId && prev.payload.conversationId === conversationId;
+        return sameRoom || sameConversation ? null : prev;
       });
       if (stopped) {
         logCall("rejected");
@@ -934,6 +963,7 @@ export function MessagesScreen({
     socket.on("message:deleted", onMessageDeleted);
     socket.on("call:offer", onCallOffer);
     socket.on("call:answer", onCallAnswer);
+    socket.on("call:answered", onCallAnswered);
     socket.on("call:end", onCallEnd);
     // Backend emits "call:ended" (with "d") from endActiveCallRoom — listen to both.
     socket.on("call:ended", onCallEnd);
@@ -954,6 +984,7 @@ export function MessagesScreen({
       socket.off("message:deleted", onMessageDeleted);
       socket.off("call:offer", onCallOffer);
       socket.off("call:answer", onCallAnswer);
+      socket.off("call:answered", onCallAnswered);
       socket.off("call:end", onCallEnd);
       socket.off("call:ended", onCallEnd);
       socket.off("call:reject", onCallReject);
