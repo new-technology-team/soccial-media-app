@@ -1,7 +1,44 @@
-.env
-node_modules
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native (Continuous Native Generation — sinh lại bằng `expo prebuild`)
+android/
+ios/
+
+# Metro
+.metro-health-check*
+
+# debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
 metro-run.err
 metro-run.log
+
+# Build artifacts
+*.apk
+*.aab
+*.ipa
+
+# Environment (giữ .env.example để commit lam template)
+.env
+.env*.local
+
+# TypeScript
+*.tsbuildinfo
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.pem
+
+# Internal notes (khong push)
 CLAUDE.md
-android
-ios
