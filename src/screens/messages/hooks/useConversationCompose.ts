@@ -135,8 +135,8 @@ export function useConversationCompose({
         }
       } catch (err) {
         Alert.alert(
-          "Khong the tao hoi thoai",
-          err instanceof Error ? err.message : "Vui long thu lai",
+          "Không thể tạo hội thoại",
+          err instanceof Error ? err.message : "Vui lòng thử lại",
         );
       } finally {
         setIsSubmittingCompose(false);
@@ -170,14 +170,14 @@ export function useConversationCompose({
 
   const handleCreateGroup = useCallback(async () => {
     if (!groupName.trim()) {
-      Alert.alert("Thieu thong tin", "Vui long nhap ten nhom.");
+      Alert.alert("Thiếu thông tin", "Vui lòng nhập tên nhóm.");
       return;
     }
 
     if (groupMemberIds.length < 2) {
       Alert.alert(
-        "Thieu thanh vien",
-        "Nhom can it nhat 3 nguoi (ban va 2 thanh vien khac).",
+        "Thiếu thành viên",
+        "Nhóm cần ít nhất 3 người (bạn và 2 thành viên khác).",
       );
       return;
     }
@@ -193,8 +193,8 @@ export function useConversationCompose({
       closeCompose();
     } catch (err) {
       Alert.alert(
-        "Khong the tao nhom",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể tạo nhóm",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsSubmittingCompose(false);

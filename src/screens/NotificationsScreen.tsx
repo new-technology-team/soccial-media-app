@@ -49,7 +49,7 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
       const next: Notification = {
         id: String(payload?.id || Date.now()),
         type: payload?.type ? String(payload.type) : "general",
-        title: String(payload?.title || "Thong bao"),
+        title: String(payload?.title || "Thông báo"),
         body: payload?.body ? String(payload.body) : undefined,
         isRead: Boolean(payload?.isRead ?? payload?.is_read ?? false),
         is_read: Boolean(payload?.isRead ?? payload?.is_read ?? false),
@@ -70,10 +70,10 @@ export function NotificationsScreen({ onOpenPost }: NotificationsScreenProps) {
   }, []);
 
   const handleDeleteNotification = useCallback((item: Notification) => {
-    Alert.alert("Xoa thong bao", "Ban muon xoa thong bao nay?", [
-      { text: "Huy", style: "cancel" },
+    Alert.alert("Xóa thông báo", "Bạn muốn xóa thông báo này?", [
+      { text: "Hủy", style: "cancel" },
       {
-        text: "Xoa",
+        text: "Xóa",
         style: "destructive",
         onPress: async () => {
           try {

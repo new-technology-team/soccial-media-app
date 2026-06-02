@@ -53,7 +53,7 @@ export function SearchUserRow({
             backgroundColor: "#dcfce7",
           }}
         >
-          <Text style={{ fontSize: 12, color: "#16a34a", fontWeight: "600" }}>Ban be</Text>
+          <Text style={{ fontSize: 12, color: "#16a34a", fontWeight: "600" }}>Bạn bè</Text>
         </View>
       ) : (
         <TouchableOpacity
@@ -69,7 +69,7 @@ export function SearchUserRow({
           {isLoading ? (
             <ActivityIndicator size="small" color="#fff" />
           ) : (
-            <Text style={{ fontSize: 12, color: "#fff", fontWeight: "700" }}>+ Ket ban</Text>
+            <Text style={{ fontSize: 12, color: "#fff", fontWeight: "700" }}>+ Kết bạn</Text>
           )}
         </TouchableOpacity>
       )}

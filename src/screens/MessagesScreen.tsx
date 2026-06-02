@@ -429,7 +429,7 @@ export function MessagesScreen({
       conversationId: String(payload.conversationId),
       roomId: String(payload.roomId),
       fromUserId: Number(payload.fromUserId || 0),
-      fromUserName: String(payload.fromUserName || "Nguoi dung"),
+      fromUserName: String(payload.fromUserName || "Người dùng"),
       targetUserId: Number(payload.targetUserId || 0) || undefined,
       mode: "video",
     };
@@ -477,7 +477,7 @@ export function MessagesScreen({
     async (roomId: string, displayName?: string) => {
       const url = resolveVideoCallUrl(
         roomId,
-        displayName || user.fullName || "Nguoi dung",
+        displayName || user.fullName || "Người dùng",
       );
       setIsOpeningCallRoom(true);
       // Đánh dấu để dọn modal treo khi quay lại app từ trình duyệt Jitsi.
@@ -485,7 +485,7 @@ export function MessagesScreen({
       try {
         const supported = await Linking.canOpenURL(url);
         if (!supported) {
-          throw new Error("Thiet bi khong mo duoc lien ket cuoc goi video.");
+          throw new Error("Thiết bị không mở được liên kết cuộc gọi video.");
         }
         await Linking.openURL(url);
       } finally {
@@ -577,7 +577,7 @@ export function MessagesScreen({
         id: String(payload?.id || ""),
         conversationId: String(payload?.conversationId || ""),
         senderId: Number(payload?.senderId || 0),
-        senderName: String(payload?.senderName || "Nguoi dung"),
+        senderName: String(payload?.senderName || "Người dùng"),
         content: String(payload?.content ?? payload?.text ?? ""),
         type: payload?.type ? String(payload.type) : "text",
         mediaUrl: resolveChatMediaUrl(payload?.mediaUrl),
@@ -654,7 +654,7 @@ export function MessagesScreen({
           item.id === messageId
             ? {
               ...item,
-              content: String(payload?.content ?? "Tin nhan da duoc thu hoi"),
+              content: String(payload?.content ?? "Tin nhắn đã được thu hồi"),
               type: payload?.type ? String(payload.type) : item.type,
               mediaUrl: resolveChatMediaUrl(payload?.mediaUrl),
               fileName: payload?.fileName ? String(payload.fileName) : "",
@@ -715,7 +715,7 @@ export function MessagesScreen({
         conversationId: String(raw?.conversationId || "").trim(),
         roomId: String(raw?.roomId || "").trim(),
         fromUserId: Number(raw?.fromUserId || 0),
-        fromUserName: String(raw?.fromUserName || "Nguoi dung"),
+        fromUserName: String(raw?.fromUserName || "Người dùng"),
         targetUserId: Number(raw?.targetUserId || 0) || undefined,
         mode: "video",
       };
@@ -745,7 +745,7 @@ export function MessagesScreen({
         conversationId: String(raw?.conversationId || "").trim(),
         roomId: String(raw?.roomId || "").trim(),
         fromUserId: Number(raw?.fromUserId || 0),
-        fromUserName: String(raw?.fromUserName || "Nguoi dung"),
+        fromUserName: String(raw?.fromUserName || "Người dùng"),
         answeredAt: Number(raw?.answeredAt || 0) || Date.now(),
       };
       if (!payload.conversationId || !payload.roomId) return;
@@ -774,8 +774,8 @@ export function MessagesScreen({
         });
         void openVideoCallRoom(payload.roomId, openName).catch((err) => {
           Alert.alert(
-            "Khong the mo cuoc goi video",
-            err instanceof Error ? err.message : "Vui long thu lai",
+            "Không thể mở cuộc gọi video",
+            err instanceof Error ? err.message : "Vui lòng thử lại",
           );
         });
       }
@@ -786,7 +786,7 @@ export function MessagesScreen({
         conversationId: String(raw?.conversationId || "").trim(),
         roomId: String(raw?.roomId || "").trim(),
         fromUserId: Number(raw?.fromUserId || 0),
-        fromUserName: String(raw?.fromUserName || "Nguoi dung"),
+        fromUserName: String(raw?.fromUserName || "Người dùng"),
         reason: String(raw?.reason || "").trim().toLowerCase(),
       };
       if (!payload.conversationId || !payload.roomId) return;
@@ -809,7 +809,7 @@ export function MessagesScreen({
         const rejected = payload.reason === "rejected";
         logCall(rejected ? "rejected" : "completed");
         if (rejected) {
-          Alert.alert("Cuoc goi bi tu choi", "Nguoi nhan da tu choi cuoc goi.");
+          Alert.alert("Cuộc gọi bị từ chối", "Người nhận đã từ chối cuộc gọi.");
         }
       }
     };
@@ -826,7 +826,7 @@ export function MessagesScreen({
       });
       if (stopped) {
         logCall("rejected");
-        Alert.alert("Cuoc goi bi tu choi", "Nguoi nhan da tu choi cuoc goi.");
+        Alert.alert("Cuộc gọi bị từ chối", "Người nhận đã từ chối cuộc gọi.");
       }
     };
 
@@ -843,8 +843,8 @@ export function MessagesScreen({
       if (stopped || !roomId) {
         logCall("no_answer");
         Alert.alert(
-          "Khong the goi",
-          "Nguoi dung hien khong truc tuyen.",
+          "Không thể gọi",
+          "Người dùng hiện không trực tuyến.",
         );
       }
     };
@@ -1140,7 +1140,7 @@ export function MessagesScreen({
       id: optimisticId,
       conversationId: selectedConv.id,
       senderId: Number(user.id),
-      senderName: user.fullName || "Nguoi dung",
+      senderName: user.fullName || "Người dùng",
       content: text,
       type: "text",
       createdAt: new Date().toISOString(),
@@ -1175,8 +1175,8 @@ export function MessagesScreen({
       setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
       setMessageText(text);
       Alert.alert(
-        "Khong the gui tin nhan",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể gửi tin nhắn",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     }
   }, [
@@ -1197,7 +1197,7 @@ export function MessagesScreen({
         role: Number(m.senderId) === Number(user.id) ? "user" : "other",
         text: m.content,
       }));
-      const res = await api.suggestReplies(last10, user.fullName || "Ban");
+      const res = await api.suggestReplies(last10, user.fullName || "Bạn");
       setAiSuggestions((res.suggestions || []).slice(0, 3));
     } catch {
       setAiSuggestions([]);
@@ -1212,7 +1212,7 @@ export function MessagesScreen({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Thieu quyen", "Vui long cap quyen thu vien anh.");
+        Alert.alert("Thiếu quyền", "Vui lòng cấp quyền thư viện ảnh.");
         return;
       }
 
@@ -1232,14 +1232,14 @@ export function MessagesScreen({
         uri: asset.uri,
       });
       if (!base64) {
-        Alert.alert(isVideo ? "Khong the gui video" : "Khong the gui anh", "Khong doc duoc du lieu.");
+        Alert.alert(isVideo ? "Không thể gửi video" : "Không thể gửi ảnh", "Không đọc được dữ liệu.");
         return;
       }
 
       const sizeLimit = isVideo ? 50 * 1024 * 1024 : 12 * 1024 * 1024;
       const approxBytes = Math.floor((base64.length * 3) / 4);
       if (approxBytes > sizeLimit) {
-        Alert.alert(isVideo ? "Video qua lon" : "Anh qua lon", `Vui long chon ${isVideo ? "video nho hon 50MB" : "anh nho hon 12MB"}.`);
+        Alert.alert(isVideo ? "Video quá lớn" : "Ảnh quá lớn", `Vui lòng chọn ${isVideo ? "video nhỏ hơn 50MB" : "ảnh nhỏ hơn 12MB"}.`);
         return;
       }
 
@@ -1253,7 +1253,7 @@ export function MessagesScreen({
       });
 
       if (!uploaded.fileUrl) {
-        throw new Error(`Upload ${isVideo ? "video" : "anh"} that bai`);
+        throw new Error(`Tải ${isVideo ? "video" : "ảnh"} lên thất bại`);
       }
 
       const replyId = replyToMessage?.id ?? undefined;
@@ -1277,8 +1277,8 @@ export function MessagesScreen({
       scrollMessagesToEnd();
     } catch (err) {
       Alert.alert(
-        "Khong the gui",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể gửi",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsUploadingAttachment(false);
@@ -1302,13 +1302,13 @@ export function MessagesScreen({
         uri: (asset as any).uri,
       });
       if (!base64) {
-        Alert.alert("Khong the gui tep", "Khong doc duoc du lieu tep.");
+        Alert.alert("Không thể gửi tệp", "Không đọc được dữ liệu tệp.");
         return;
       }
 
       const approxBytes = Math.floor((base64.length * 3) / 4);
       if (approxBytes > 15 * 1024 * 1024) {
-        Alert.alert("Tep qua lon", "Vui long chon tep nho hon 15MB.");
+        Alert.alert("Tệp quá lớn", "Vui lòng chọn tệp nhỏ hơn 15MB.");
         return;
       }
 
@@ -1320,7 +1320,7 @@ export function MessagesScreen({
       });
 
       if (!uploaded.fileUrl) {
-        throw new Error("Upload tep that bai");
+        throw new Error("Tải tệp lên thất bại");
       }
 
       const replyId = replyToMessage?.id ?? undefined;
@@ -1341,8 +1341,8 @@ export function MessagesScreen({
       scrollMessagesToEnd();
     } catch (err) {
       Alert.alert(
-        "Khong the gui tep",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể gửi tệp",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsUploadingAttachment(false);
@@ -1394,11 +1394,11 @@ export function MessagesScreen({
       try {
         await api.forwardMessage(forwardTargetMessage.id, targetConvId);
         setForwardTargetMessage(null);
-        Alert.alert("Da chuyen tiep", "Tin nhan da duoc chuyen tiep thanh cong.");
+        Alert.alert("Đã chuyển tiếp", "Tin nhắn đã được chuyển tiếp thành công.");
       } catch (err) {
         Alert.alert(
-          "Khong the chuyen tiep",
-          err instanceof Error ? err.message : "Vui long thu lai",
+          "Không thể chuyển tiếp",
+          err instanceof Error ? err.message : "Vui lòng thử lại",
         );
       } finally {
         setIsForwarding(false);
@@ -1414,7 +1414,7 @@ export function MessagesScreen({
       const result = await api.translateMessage(text, "vi");
       setTranslatedMessages((prev) => ({ ...prev, [String(message.id)]: result.translatedText }));
     } catch {
-      Alert.alert("Khong the dich", "Vui long thu lai sau.");
+      Alert.alert("Không thể dịch", "Vui lòng thử lại sau.");
     }
   }, []);
 
@@ -1423,7 +1423,7 @@ export function MessagesScreen({
       await api.deleteMessage(message.id);
       setMessages((prev) => prev.filter((item) => item.id !== message.id));
     } catch (err) {
-      Alert.alert("Khong the xoa", err instanceof Error ? err.message : "Vui long thu lai.");
+      Alert.alert("Không thể xóa", err instanceof Error ? err.message : "Vui lòng thử lại.");
     }
   }, []);
 
@@ -1506,7 +1506,7 @@ export function MessagesScreen({
         roomId: payload.roomId,
         targetUserId: payload.targetUserId,
         fromUserId: user.id,
-        fromUserName: user.fullName || "Nguoi dung",
+        fromUserName: user.fullName || "Người dùng",
         reason: payload.reason,
       });
     },
@@ -1517,7 +1517,7 @@ export function MessagesScreen({
     if (!selectedConv || !canStartVideoCall) return;
     const socket = socketRef.current;
     if (!socket) {
-      Alert.alert("Chua ket noi socket", "Vui long thu lai sau it giay.");
+      Alert.alert("Chưa kết nối socket", "Vui lòng thử lại sau ít giây.");
       return;
     }
 
@@ -1526,7 +1526,7 @@ export function MessagesScreen({
       conversationId: String(selectedConv.id),
       roomId,
       fromUserId: Number(user.id),
-      fromUserName: user.fullName || "Nguoi dung",
+      fromUserName: user.fullName || "Người dùng",
       mode: "video",
       targetUserId: isGroupCallConversation
         ? undefined
@@ -1549,8 +1549,8 @@ export function MessagesScreen({
         await openVideoCallRoom(roomId);
       } catch (err) {
         Alert.alert(
-          "Khong the mo cuoc goi video",
-          err instanceof Error ? err.message : "Vui long thu lai",
+          "Không thể mở cuộc gọi video",
+          err instanceof Error ? err.message : "Vui lòng thử lại",
         );
         emitCallEnd({
           conversationId: payload.conversationId,
@@ -1582,7 +1582,7 @@ export function MessagesScreen({
     if (!incomingCall) return;
     const socket = socketRef.current;
     if (!socket) {
-      Alert.alert("Chua ket noi socket", "Vui long thu lai sau it giay.");
+      Alert.alert("Chưa kết nối socket", "Vui lòng thử lại sau ít giây.");
       return;
     }
 
@@ -1593,7 +1593,7 @@ export function MessagesScreen({
       roomId: payload.roomId,
       targetUserId: payload.fromUserId || undefined,
       fromUserId: user.id,
-      fromUserName: user.fullName || "Nguoi dung",
+      fromUserName: user.fullName || "Người dùng",
       answeredAt: Date.now(),
       // Báo cho bên gọi (có thể là web đang WebRTC) chuyển sang mở Jitsi cùng phòng.
       useJitsi: true,
@@ -1611,8 +1611,8 @@ export function MessagesScreen({
       await openVideoCallRoom(payload.roomId, callName);
     } catch (err) {
       Alert.alert(
-        "Khong the mo cuoc goi video",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể mở cuộc gọi video",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
       emitCallEnd({
         conversationId: payload.conversationId,
@@ -1632,7 +1632,7 @@ export function MessagesScreen({
       roomId: incomingCall.payload.roomId,
       targetUserId: incomingCall.payload.fromUserId || undefined,
       fromUserId: user.id,
-      fromUserName: user.fullName || "Nguoi dung",
+      fromUserName: user.fullName || "Người dùng",
       reason: "rejected",
     });
     setIncomingCall(null);
@@ -1694,8 +1694,8 @@ export function MessagesScreen({
       setShowConversationMenu(false);
     } catch (err) {
       Alert.alert(
-        "Khong cap nhat duoc",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không cập nhật được",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsMutatingConversation(false);
@@ -1720,8 +1720,8 @@ export function MessagesScreen({
       setShowConversationMenu(false);
     } catch (err) {
       Alert.alert(
-        "Khong the cap nhat chan tin nhan",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể cập nhật chặn tin nhắn",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsMutatingConversation(false);
@@ -1739,7 +1739,7 @@ export function MessagesScreen({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Thieu quyen", "Vui long cap quyen thu vien anh.");
+        Alert.alert("Thiếu quyền", "Vui lòng cấp quyền thư viện ảnh.");
         return;
       }
 
@@ -1752,13 +1752,13 @@ export function MessagesScreen({
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       if (!asset.base64) {
-        Alert.alert("Khong the doi avatar", "Khong doc duoc du lieu anh.");
+        Alert.alert("Không thể đổi avatar", "Không đọc được dữ liệu ảnh.");
         return;
       }
 
       const approxBytes = Math.floor((asset.base64.length * 3) / 4);
       if (approxBytes > 8 * 1024 * 1024) {
-        Alert.alert("Anh qua lon", "Vui long chon anh nho hon 8MB.");
+        Alert.alert("Ảnh quá lớn", "Vui lòng chọn ảnh nhỏ hơn 8MB.");
         return;
       }
 
@@ -1769,7 +1769,7 @@ export function MessagesScreen({
         base64Data: asset.base64,
       });
       if (!uploaded.fileUrl) {
-        throw new Error("Upload avatar that bai");
+        throw new Error("Tải avatar lên thất bại");
       }
 
       await api.updateGroupConversationAvatar(selectedConv.id, uploaded.fileUrl);
@@ -1778,8 +1778,8 @@ export function MessagesScreen({
       setShowConversationMenu(false);
     } catch (err) {
       Alert.alert(
-        "Khong the doi avatar nhom",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể đổi avatar nhóm",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsMutatingConversation(false);
@@ -1788,10 +1788,10 @@ export function MessagesScreen({
 
   const handleLeaveGroup = useCallback(() => {
     if (!selectedConv) return;
-    Alert.alert("Roi nhom", "Ban chac chan muon roi nhom?", [
-      { text: "Huy", style: "cancel" },
+    Alert.alert("Rời nhóm", "Bạn chắc chắn muốn rời nhóm?", [
+      { text: "Hủy", style: "cancel" },
       {
-        text: "Roi nhom",
+        text: "Rời nhóm",
         style: "destructive",
         onPress: async () => {
           setIsMutatingConversation(true);
@@ -1804,8 +1804,8 @@ export function MessagesScreen({
             void loadConversations();
           } catch (err) {
             Alert.alert(
-              "Khong the roi nhom",
-              err instanceof Error ? err.message : "Vui long thu lai",
+              "Không thể rời nhóm",
+              err instanceof Error ? err.message : "Vui lòng thử lại",
             );
           } finally {
             setIsMutatingConversation(false);
@@ -1818,12 +1818,12 @@ export function MessagesScreen({
   const handleDissolveGroup = useCallback(() => {
     if (!selectedConv) return;
     Alert.alert(
-      "Giai tan nhom",
-      "Giai tan nhom se xoa cuoc tro chuyen nay cho tat ca thanh vien.",
+      "Giải tán nhóm",
+      "Giải tán nhóm sẽ xóa cuộc trò chuyện này cho tất cả thành viên.",
       [
-        { text: "Huy", style: "cancel" },
+        { text: "Hủy", style: "cancel" },
         {
-          text: "Giai tan",
+          text: "Giải tán",
           style: "destructive",
           onPress: async () => {
             setIsMutatingConversation(true);
@@ -1836,8 +1836,8 @@ export function MessagesScreen({
               void loadConversations();
             } catch (err) {
               Alert.alert(
-                "Khong the giai tan nhom",
-                err instanceof Error ? err.message : "Vui long thu lai",
+                "Không thể giải tán nhóm",
+                err instanceof Error ? err.message : "Vui lòng thử lại",
               );
             } finally {
               setIsMutatingConversation(false);
@@ -1864,8 +1864,8 @@ export function MessagesScreen({
       setShowRenameModal(false);
     } catch (err) {
       Alert.alert(
-        "Khong the doi ten nhom",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể đổi tên nhóm",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsMutatingConversation(false);
@@ -1904,8 +1904,8 @@ export function MessagesScreen({
         setAddMemberResults((prev) => prev.filter((u) => u.id !== targetUserId));
       } catch (err) {
         Alert.alert(
-          "Khong the them thanh vien",
-          err instanceof Error ? err.message : "Vui long thu lai",
+          "Không thể thêm thành viên",
+          err instanceof Error ? err.message : "Vui lòng thử lại",
         );
       } finally {
         setIsMutatingConversation(false);
@@ -1928,10 +1928,10 @@ export function MessagesScreen({
         text: string;
         style?: "cancel" | "destructive" | "default";
         onPress?: () => void;
-      }> = [{ text: "Huy", style: "cancel" }];
+      }> = [{ text: "Hủy", style: "cancel" }];
 
       options.push({
-        text: "Dat biet danh",
+        text: "Đặt biệt danh",
         onPress: () => {
           setNicknameInput(
             String(
@@ -1947,47 +1947,47 @@ export function MessagesScreen({
       if (amLeader) {
         if (member.role !== "deputy") {
           options.push({
-            text: "Phan quyen Pho nhom",
+            text: "Phân quyền Phó nhóm",
             onPress: async () => {
               try {
                 await api.setGroupDeputy(selectedConv.id, member.userId);
                 await loadConversationDetail(selectedConv.id);
               } catch (err) {
-                Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+                Alert.alert("Lỗi", err instanceof Error ? err.message : "Thử lại sau");
               }
             },
           });
         } else {
           options.push({
-            text: "Bo quyen Pho nhom",
+            text: "Bỏ quyền Phó nhóm",
             onPress: async () => {
               try {
                 await api.setGroupDeputy(selectedConv.id, null);
                 await loadConversationDetail(selectedConv.id);
               } catch (err) {
-                Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+                Alert.alert("Lỗi", err instanceof Error ? err.message : "Thử lại sau");
               }
             },
           });
         }
 
         options.push({
-          text: "Chuyen quyen truong nhom",
+          text: "Chuyển quyền trưởng nhóm",
           onPress: () => {
             Alert.alert(
-              "Chuyen quyen truong nhom",
-              `Chuyen quyen truong nhom cho ${member.fullName}? Ban se tro thanh thanh vien thuong.`,
+              "Chuyển quyền trưởng nhóm",
+              `Chuyển quyền trưởng nhóm cho ${member.fullName}? Bạn sẽ trở thành thành viên thường.`,
               [
-                { text: "Huy", style: "cancel" },
+                { text: "Hủy", style: "cancel" },
                 {
-                  text: "Chuyen quyen",
+                  text: "Chuyển quyền",
                   style: "destructive",
                   onPress: async () => {
                     try {
                       await api.transferGroupLeader(selectedConv.id, member.userId);
                       await loadConversationDetail(selectedConv.id);
                     } catch (err) {
-                      Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+                      Alert.alert("Lỗi", err instanceof Error ? err.message : "Thử lại sau");
                     }
                   },
                 },
@@ -1999,20 +1999,20 @@ export function MessagesScreen({
 
       if (amLeader || amDeputy) {
         options.push({
-          text: "Xoa khoi nhom",
+          text: "Xóa khỏi nhóm",
           style: "destructive",
           onPress: async () => {
             try {
               await api.removeGroupMember(selectedConv.id, member.userId);
               await loadConversationDetail(selectedConv.id);
             } catch (err) {
-              Alert.alert("Loi", err instanceof Error ? err.message : "Thu lai sau");
+              Alert.alert("Lỗi", err instanceof Error ? err.message : "Thử lại sau");
             }
           },
         });
       }
 
-      Alert.alert(member.fullName, "Chon hanh dong", options);
+      Alert.alert(member.fullName, "Chọn hành động", options);
     },
     [activeConversation, loadConversationDetail, myMemberRole, selectedConv, user.id],
   );
@@ -2031,8 +2031,8 @@ export function MessagesScreen({
       await loadConversationDetail(selectedConv.id);
     } catch (err) {
       Alert.alert(
-        "Khong the dat biet danh",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể đặt biệt danh",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     }
   }, [loadConversationDetail, nicknameDialog, nicknameInput, selectedConv]);
@@ -2117,7 +2117,7 @@ export function MessagesScreen({
         id: optimisticId,
         conversationId: selectedConv.id,
         senderId: Number(user.id),
-        senderName: user.fullName || "Nguoi dung",
+        senderName: user.fullName || "Người dùng",
         content: token,
         type: "sticker",
         createdAt: new Date().toISOString(),
@@ -2146,8 +2146,8 @@ export function MessagesScreen({
       } catch (err) {
         setMessages((prev) => prev.filter((item) => item.id !== optimisticId));
         Alert.alert(
-          "Khong the gui sticker",
-          err instanceof Error ? err.message : "Vui long thu lai",
+          "Không thể gửi sticker",
+          err instanceof Error ? err.message : "Vui lòng thử lại",
         );
       }
     },
@@ -2165,8 +2165,8 @@ export function MessagesScreen({
       void loadConversations();
     } catch (err) {
       Alert.alert(
-        "Khong the cap nhat ghim",
-        err instanceof Error ? err.message : "Vui long thu lai",
+        "Không thể cập nhật ghim",
+        err instanceof Error ? err.message : "Vui lòng thử lại",
       );
     } finally {
       setIsMutatingConversation(false);
@@ -2189,8 +2189,8 @@ export function MessagesScreen({
         void loadConversations();
       } catch (err) {
         Alert.alert(
-          "Khong the cap nhat tat tieng",
-          err instanceof Error ? err.message : "Vui long thu lai",
+          "Không thể cập nhật tắt tiếng",
+          err instanceof Error ? err.message : "Vui lòng thử lại",
         );
       } finally {
         setIsMutatingConversation(false);
@@ -2201,11 +2201,11 @@ export function MessagesScreen({
       void applyMute(false, null);
       return;
     }
-    Alert.alert("Tat tieng hoi thoai", "Chon thoi gian tat tieng", [
-      { text: "1 gio", onPress: () => void applyMute(true, 1) },
-      { text: "8 gio", onPress: () => void applyMute(true, 8) },
-      { text: "Vo thoi han", onPress: () => void applyMute(true, null) },
-      { text: "Huy", style: "cancel" },
+    Alert.alert("Tắt tiếng hội thoại", "Chọn thời gian tắt tiếng", [
+      { text: "1 giờ", onPress: () => void applyMute(true, 1) },
+      { text: "8 giờ", onPress: () => void applyMute(true, 8) },
+      { text: "Vô thời hạn", onPress: () => void applyMute(true, null) },
+      { text: "Hủy", style: "cancel" },
     ]);
   }, [activeConversation?.isMuted, loadConversationDetail, loadConversations, selectedConv]);
 
@@ -2213,12 +2213,12 @@ export function MessagesScreen({
     if (!selectedConv) return;
     const convId = selectedConv.id;
     Alert.alert(
-      "Xoa lich su tro chuyen",
-      "Toan bo tin nhan se bi xoa khoi phia ban (nguoi khac van thay).",
+      "Xóa lịch sử trò chuyện",
+      "Toàn bộ tin nhắn sẽ bị xóa khỏi phía bạn (người khác vẫn thấy).",
       [
-        { text: "Huy", style: "cancel" },
+        { text: "Hủy", style: "cancel" },
         {
-          text: "Xoa",
+          text: "Xóa",
           style: "destructive",
           onPress: async () => {
             setIsMutatingConversation(true);
@@ -2229,8 +2229,8 @@ export function MessagesScreen({
               void loadConversations();
             } catch (err) {
               Alert.alert(
-                "Khong the xoa lich su",
-                err instanceof Error ? err.message : "Vui long thu lai",
+                "Không thể xóa lịch sử",
+                err instanceof Error ? err.message : "Vui lòng thử lại",
               );
             } finally {
               setIsMutatingConversation(false);
@@ -2254,7 +2254,7 @@ export function MessagesScreen({
         subtitle={selectedConv && peerIsTyping ? "Đang soạn tin..." : undefined}
         leftAction={
           selectedConv
-            ? { label: "Quay lai", onPress: () => setSelectedConv(null) }
+            ? { label: "Quay lại", onPress: () => setSelectedConv(null) }
             : undefined
         }
         rightAction={
@@ -2263,7 +2263,7 @@ export function MessagesScreen({
               className="px-3 py-1.5 rounded-full bg-primary"
               onPress={() => openCompose("group")}
             >
-              <Text className="text-white text-xs font-semibold">+ Nhom</Text>
+              <Text className="text-white text-xs font-semibold">+ Nhóm</Text>
             </TouchableOpacity>
           ) : (
             <View className="flex-row items-center">
@@ -2332,7 +2332,7 @@ export function MessagesScreen({
             className="flex-1 mx-2 text-sm text-foreground"
             value={messageSearchKeyword}
             onChangeText={setMessageSearchKeyword}
-            placeholder="Tim tin nhan trong hoi thoai..."
+            placeholder="Tìm tin nhắn trong hội thoại..."
             placeholderTextColor="#9ca3af"
             autoFocus
             returnKeyType="search"
@@ -2373,9 +2373,9 @@ export function MessagesScreen({
           >
             <Feather name="paperclip" size={14} color="#4f46e5" />
             <View className="ml-2 flex-1">
-              <Text className="text-xs font-semibold text-indigo-600 mb-0.5">Tin nhan da ghim</Text>
+              <Text className="text-xs font-semibold text-indigo-600 mb-0.5">Tin nhắn đã ghim</Text>
               <Text className="text-[13px] text-foreground" numberOfLines={1}>
-                {pinnedMessage.type === "image" ? "🖼 Anh" : pinnedMessage.type === "video" ? "📹 Video" : pinnedMessage.type === "file" ? "📎 Tep dinh kem" : String(pinnedMessage.content || "")}
+                {pinnedMessage.type === "image" ? "🖼 Ảnh" : pinnedMessage.type === "video" ? "📹 Video" : pinnedMessage.type === "file" ? "📎 Tệp đính kèm" : String(pinnedMessage.content || "")}
               </Text>
             </View>
             <TouchableOpacity 
@@ -2399,8 +2399,8 @@ export function MessagesScreen({
             onChangeText={setConversationKeyword}
             placeholder={
               mode === "groups"
-                ? "Tim nhom tro chuyen..."
-                : "Tim cuoc tro chuyen hoac nhom..."
+                ? "Tìm nhóm trò chuyện..."
+                : "Tìm cuộc trò chuyện hoặc nhóm..."
             }
           />
 
@@ -2432,17 +2432,17 @@ export function MessagesScreen({
                   icon="💬"
                   title={
                     conversationKeyword.trim().length
-                      ? "Khong tim thay cuoc tro chuyen phu hop"
+                      ? "Không tìm thấy cuộc trò chuyện phù hợp"
                       : mode === "groups"
-                        ? "Chua co nhom nao"
-                        : "Chua co cuoc tro chuyen nao"
+                        ? "Chưa có nhóm nào"
+                        : "Chưa có cuộc trò chuyện nào"
                   }
                   subtitle={
                     conversationKeyword.trim().length
-                      ? "Thu tu khoa khac de tim nhom hoac ban be"
+                      ? "Thử từ khóa khác để tìm nhóm hoặc bạn bè"
                       : mode === "groups"
-                        ? "Tao nhom de bat dau chat theo nhom"
-                        : "Bat dau tro chuyen voi ban be!"
+                        ? "Tạo nhóm để bắt đầu chat theo nhóm"
+                        : "Bắt đầu trò chuyện với bạn bè!"
                   }
                 />
               ) : null
@@ -2498,8 +2498,8 @@ export function MessagesScreen({
                 <View className="py-10 items-center">
                   <Text className="text-sm text-muted-foreground">
                     {isSearchingMessages
-                      ? "Dang tim..."
-                      : "Khong tim thay tin nhan phu hop"}
+                      ? "Đang tìm..."
+                      : "Không tìm thấy tin nhắn phù hợp"}
                   </Text>
                 </View>
               ) : null
@@ -2553,12 +2553,12 @@ export function MessagesScreen({
               <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#f0f4ff", borderLeftWidth: 3, borderLeftColor: "#4f46e5", paddingHorizontal: 12, paddingVertical: 6, marginHorizontal: 8, marginBottom: 4, borderRadius: 6 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 12, color: "#4f46e5", fontWeight: "600", marginBottom: 1 }} numberOfLines={1}>
-                    {replyToMessage.senderName || "Tin nhan"}
+                    {replyToMessage.senderName || "Tin nhắn"}
                   </Text>
                   <Text style={{ fontSize: 12, color: "#6b7280" }} numberOfLines={1}>
-                    {replyToMessage.type === "image" ? "🖼 Anh"
+                    {replyToMessage.type === "image" ? "🖼 Ảnh"
                       : replyToMessage.type === "video" ? "📹 Video"
-                      : replyToMessage.type === "file" ? "📎 Tep dinh kem"
+                      : replyToMessage.type === "file" ? "📎 Tệp đính kèm"
                       : String(replyToMessage.content || "")}
                   </Text>
                 </View>
@@ -2638,13 +2638,13 @@ export function MessagesScreen({
                   placeholder={
                     !activeConversation?.isGroup &&
                       activeConversation?.isBlockedByMe
-                      ? "Ban dang chan nguoi nay"
+                      ? "Bạn đang chặn người này"
                       : !activeConversation?.isGroup &&
                         activeConversation?.isBlockedMe
-                        ? "Ban da bi chan tin nhan"
+                        ? "Bạn đã bị chặn tin nhắn"
                         : isUploadingAttachment
-                          ? "Dang tai tep..."
-                          : "Nhan tin..."
+                          ? "Đang tải tệp..."
+                          : "Nhắn tin..."
                   }
                 />
               </View>
@@ -2665,10 +2665,10 @@ export function MessagesScreen({
               <Feather name="video" size={22} color="#0052ce" />
             </View>
             <Text className="text-base font-bold text-foreground text-center mb-1">
-              Dang goi video...
+              Đang gọi video...
             </Text>
             <Text className="text-sm text-muted-foreground text-center mb-4">
-              {outgoingCall?.conversationName || "Cuoc tro chuyen"}
+              {outgoingCall?.conversationName || "Cuộc trò chuyện"}
             </Text>
 
             <View className="items-center mb-4">
@@ -2680,7 +2680,7 @@ export function MessagesScreen({
               onPress={handleCancelOutgoingCall}
               activeOpacity={0.85}
             >
-              <Text className="text-danger font-semibold">Huy cuoc goi</Text>
+              <Text className="text-danger font-semibold">Hủy cuộc gọi</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2698,10 +2698,10 @@ export function MessagesScreen({
               <Feather name="video" size={22} color="#0052ce" />
             </View>
             <Text className="text-base font-bold text-foreground text-center mb-1">
-              Cuoc goi video den
+              Cuộc gọi video đến
             </Text>
             <Text className="text-sm text-muted-foreground text-center mb-5">
-              {incomingCall?.payload.fromUserName || "Nguoi dung"} dang goi cho ban
+              {incomingCall?.payload.fromUserName || "Người dùng"} đang gọi cho bạn
             </Text>
 
             <View className="flex-row items-center">
@@ -2710,7 +2710,7 @@ export function MessagesScreen({
                 onPress={handleDeclineIncomingCall}
                 activeOpacity={0.85}
               >
-                <Text className="text-danger font-semibold">Tu choi</Text>
+                <Text className="text-danger font-semibold">Từ chối</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="flex-1 h-11 rounded-xl bg-primary items-center justify-center ml-2"
@@ -2722,7 +2722,7 @@ export function MessagesScreen({
                 {isOpeningCallRoom ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : (
-                  <Text className="text-white font-semibold">Nhan</Text>
+                  <Text className="text-white font-semibold">Nhận</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -2771,13 +2771,13 @@ export function MessagesScreen({
         <View className="flex-1 bg-black/35 items-center justify-center px-6">
           <View className="w-full rounded-2xl bg-surface border border-border p-5">
             <Text className="text-base font-bold text-foreground mb-3">
-              Doi ten nhom
+              Đổi tên nhóm
             </Text>
             <TextInput
               className="h-11 border border-border rounded-xl px-3 text-sm text-foreground bg-surface-secondary mb-4"
               value={renameGroupInput}
               onChangeText={setRenameGroupInput}
-              placeholder="Nhap ten nhom moi..."
+              placeholder="Nhập tên nhóm mới..."
               placeholderTextColor="#9ca3af"
               maxLength={60}
               autoFocus
@@ -2789,7 +2789,7 @@ export function MessagesScreen({
                 className="flex-1 h-11 rounded-xl border border-border items-center justify-center mr-2"
                 onPress={() => setShowRenameModal(false)}
               >
-                <Text className="text-sm font-semibold text-muted-foreground">Huy</Text>
+                <Text className="text-sm font-semibold text-muted-foreground">Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className={`flex-1 h-11 rounded-xl items-center justify-center ml-2 ${isMutatingConversation || !renameGroupInput.trim()
@@ -2803,7 +2803,7 @@ export function MessagesScreen({
                 {isMutatingConversation ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text className="text-white font-semibold text-sm">Luu</Text>
+                  <Text className="text-white font-semibold text-sm">Lưu</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -2821,7 +2821,7 @@ export function MessagesScreen({
         <View className="flex-1 bg-black/35 items-center justify-center px-6">
           <View className="w-full rounded-2xl bg-surface border border-border p-5">
             <Text className="text-base font-bold text-foreground mb-1">
-              Dat biet danh
+              Đặt biệt danh
             </Text>
             <Text className="text-xs text-muted-foreground mb-3">
               {nicknameDialog?.fullName}
@@ -2830,7 +2830,7 @@ export function MessagesScreen({
               className="h-11 border border-border rounded-xl px-3 text-sm text-foreground bg-surface-secondary mb-4"
               value={nicknameInput}
               onChangeText={setNicknameInput}
-              placeholder="Nhap biet danh (de trong de xoa)..."
+              placeholder="Nhập biệt danh (để trống để xóa)..."
               placeholderTextColor="#9ca3af"
               maxLength={60}
               autoFocus
@@ -2842,7 +2842,7 @@ export function MessagesScreen({
                 className="flex-1 h-11 rounded-xl border border-border items-center justify-center mr-2"
                 onPress={() => setNicknameDialog(null)}
               >
-                <Text className="text-sm font-semibold text-muted-foreground">Huy</Text>
+                <Text className="text-sm font-semibold text-muted-foreground">Hủy</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 className="flex-1 h-11 rounded-xl items-center justify-center ml-2 bg-primary"
@@ -2897,7 +2897,7 @@ export function MessagesScreen({
         <View className="flex-1 bg-black/35 justify-end">
           <View className="bg-surface rounded-t-3xl px-4 pt-4 pb-6 border-t border-border" style={{ maxHeight: "65%" }}>
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-base font-bold text-foreground">Chuyen tiep den</Text>
+              <Text className="text-base font-bold text-foreground">Chuyển tiếp đến</Text>
               <TouchableOpacity onPress={() => setForwardTargetMessage(null)}>
                 <Feather name="x" size={18} color="#6b7280" />
               </TouchableOpacity>
@@ -2932,7 +2932,7 @@ export function MessagesScreen({
               }}
               ListEmptyComponent={
                 <View className="py-6 items-center">
-                  <Text className="text-sm text-muted-foreground">Chua co cuoc tro chuyen nao</Text>
+                  <Text className="text-sm text-muted-foreground">Chưa có cuộc trò chuyện nào</Text>
                 </View>
               }
             />
@@ -2958,7 +2958,7 @@ export function MessagesScreen({
           >
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-base font-bold text-foreground">
-                Them thanh vien
+                Thêm thành viên
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -2973,7 +2973,7 @@ export function MessagesScreen({
             <SearchBar
               value={addMemberKeyword}
               onChangeText={(text) => { void handleSearchAddMember(text); }}
-              placeholder="Tim nguoi dung de them..."
+              placeholder="Tìm người dùng để thêm..."
             />
             {isSearchingAddMember ? (
               <View className="py-4 items-center">
@@ -3000,7 +3000,7 @@ export function MessagesScreen({
                       disabled={isMutatingConversation}
                       activeOpacity={0.8}
                     >
-                      <Text className="text-white text-xs font-semibold">Them</Text>
+                      <Text className="text-white text-xs font-semibold">Thêm</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -3008,8 +3008,8 @@ export function MessagesScreen({
                   <View className="py-6 items-center">
                     <Text className="text-sm text-muted-foreground">
                       {addMemberKeyword.trim()
-                        ? "Khong tim thay nguoi dung"
-                        : "Nhap ten hoac email de tim..."}
+                        ? "Không tìm thấy người dùng"
+                        : "Nhập tên hoặc email để tìm..."}
                     </Text>
                   </View>
                 }
@@ -3030,7 +3030,7 @@ export function MessagesScreen({
             <View className="w-10 h-1 bg-border rounded-full self-center mb-4" />
 
             <Text className="text-foreground text-base font-bold mb-3">
-              Tuy chon cuoc tro chuyen
+              Tùy chọn cuộc trò chuyện
             </Text>
 
             {isLoadingConversationDetail ? (
@@ -3050,7 +3050,7 @@ export function MessagesScreen({
               >
                 <Feather name="user" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
-                  Xem trang ca nhan
+                  Xem trang cá nhân
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3066,7 +3066,7 @@ export function MessagesScreen({
               >
                 <Feather name="users" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
-                  Xem thanh vien
+                  Xem thành viên
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3083,7 +3083,7 @@ export function MessagesScreen({
               >
                 <Feather name="edit-2" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
-                  Doi ten nhom
+                  Đổi tên nhóm
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3101,7 +3101,7 @@ export function MessagesScreen({
               >
                 <Feather name="user-plus" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
-                  Them thanh vien
+                  Thêm thành viên
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3117,7 +3117,7 @@ export function MessagesScreen({
               >
                 <Feather name="image" size={16} color="#111827" />
                 <Text className="ml-3 text-sm font-medium text-foreground">
-                  Doi avatar nhom
+                  Đổi avatar nhóm
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3132,7 +3132,7 @@ export function MessagesScreen({
             >
               <Feather name="image" size={16} color="#111827" />
               <Text className="ml-3 text-sm font-medium text-foreground">
-                Anh, video va tep da chia se
+                Ảnh, video và tệp đã chia sẻ
               </Text>
             </TouchableOpacity>
 
@@ -3151,8 +3151,8 @@ export function MessagesScreen({
               />
               <Text className="ml-3 text-sm font-medium text-foreground">
                 {activeConversation?.isPinned
-                  ? "Bo ghim hoi thoai"
-                  : "Ghim hoi thoai"}
+                  ? "Bỏ ghim hội thoại"
+                  : "Ghim hội thoại"}
               </Text>
             </TouchableOpacity>
 
@@ -3168,7 +3168,7 @@ export function MessagesScreen({
                 color="#111827"
               />
               <Text className="ml-3 text-sm font-medium text-foreground">
-                {activeConversation?.isMuted ? "Bo tat tieng" : "Tat tieng hoi thoai"}
+                {activeConversation?.isMuted ? "Bỏ tắt tiếng" : "Tắt tiếng hội thoại"}
               </Text>
             </TouchableOpacity>
 
@@ -3187,8 +3187,8 @@ export function MessagesScreen({
               />
               <Text className="ml-3 text-sm font-medium text-foreground">
                 {conversationNotificationsEnabled
-                  ? "Tat thong bao cuoc tro chuyen"
-                  : "Bat thong bao cuoc tro chuyen"}
+                  ? "Tắt thông báo cuộc trò chuyện"
+                  : "Bật thông báo cuộc trò chuyện"}
               </Text>
             </TouchableOpacity>
 
@@ -3200,7 +3200,7 @@ export function MessagesScreen({
             >
               <Feather name="trash" size={16} color="#111827" />
               <Text className="ml-3 text-sm font-medium text-foreground">
-                Xoa lich su tro chuyen
+                Xóa lịch sử trò chuyện
               </Text>
             </TouchableOpacity>
 
@@ -3227,7 +3227,7 @@ export function MessagesScreen({
                     : "text-danger"
                     }`}
                 >
-                  {activeConversation?.isBlockedByMe ? "Bo chan tin nhan" : "Chan tin nhan"}
+                  {activeConversation?.isBlockedByMe ? "Bỏ chặn tin nhắn" : "Chặn tin nhắn"}
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3241,7 +3241,7 @@ export function MessagesScreen({
               >
                 <Feather name="log-out" size={16} color="#dc2626" />
                 <Text className="ml-3 text-sm font-medium text-danger">
-                  Roi khoi nhom
+                  Rời khỏi nhóm
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3255,7 +3255,7 @@ export function MessagesScreen({
               >
                 <Feather name="trash-2" size={16} color="#dc2626" />
                 <Text className="ml-3 text-sm font-medium text-danger">
-                  Giai tan nhom
+                  Giải tán nhóm
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -3265,7 +3265,7 @@ export function MessagesScreen({
               onPress={() => setShowConversationMenu(false)}
               activeOpacity={0.8}
             >
-              <Text className="text-sm font-semibold text-muted-foreground">Dong</Text>
+              <Text className="text-sm font-semibold text-muted-foreground">Đóng</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3281,7 +3281,7 @@ export function MessagesScreen({
           <View className="w-full max-h-[80%] rounded-2xl bg-surface border border-border p-4">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-base font-bold text-foreground">
-                Thanh vien nhom
+                Thành viên nhóm
               </Text>
               <TouchableOpacity onPress={() => setShowMembersModal(false)}>
                 <Feather name="x" size={18} color="#6b7280" />
@@ -3313,7 +3313,7 @@ export function MessagesScreen({
                           {item.nickname && item.nickname.trim()
                             ? item.nickname
                             : item.fullName}
-                          {isMe ? " (ban)" : ""}
+                          {isMe ? " (bạn)" : ""}
                         </Text>
                         {item.nickname && item.nickname.trim() ? (
                           <Text className="text-[11px] text-muted-foreground" numberOfLines={1}>
@@ -3326,9 +3326,9 @@ export function MessagesScreen({
                       {item.role ? (
                         <Text className="text-xs text-muted-foreground mr-2">
                           {item.role === "leader"
-                            ? "Truong nhom"
+                            ? "Trưởng nhóm"
                             : item.role === "deputy"
-                              ? "Pho nhom"
+                              ? "Phó nhóm"
                               : item.role}
                         </Text>
                       ) : null}
@@ -3383,7 +3383,7 @@ export function MessagesScreen({
                         setActionMenuMessage(null);
                       }}
                     >
-                      <Text className="text-[15px] text-foreground font-medium">Sao chep noi dung</Text>
+                      <Text className="text-[15px] text-foreground font-medium">Sao chép nội dung</Text>
                       <Feather name="copy" size={20} color="#4b5563" />
                     </TouchableOpacity>
                   )}
@@ -3396,7 +3396,7 @@ export function MessagesScreen({
                       setActionMenuMessage(null);
                     }}
                   >
-                    <Text className="text-[15px] text-foreground font-medium">Tra loi</Text>
+                    <Text className="text-[15px] text-foreground font-medium">Trả lời</Text>
                     <Feather name="corner-up-left" size={20} color="#4b5563" />
                   </TouchableOpacity>
 
@@ -3408,7 +3408,7 @@ export function MessagesScreen({
                       setActionMenuMessage(null);
                     }}
                   >
-                    <Text className="text-[15px] text-foreground font-medium">React cam xuc</Text>
+                    <Text className="text-[15px] text-foreground font-medium">React cảm xúc</Text>
                     <Feather name="smile" size={20} color="#4b5563" />
                   </TouchableOpacity>
 
@@ -3420,7 +3420,7 @@ export function MessagesScreen({
                       setActionMenuMessage(null);
                     }}
                   >
-                    <Text className="text-[15px] text-foreground font-medium">Chuyen tiep</Text>
+                    <Text className="text-[15px] text-foreground font-medium">Chuyển tiếp</Text>
                     <Feather name="corner-up-right" size={20} color="#4b5563" />
                   </TouchableOpacity>
 
@@ -3433,7 +3433,7 @@ export function MessagesScreen({
                         setActionMenuMessage(null);
                       }}
                     >
-                      <Text className="text-[15px] text-foreground font-medium">Dich tin nhan</Text>
+                      <Text className="text-[15px] text-foreground font-medium">Dịch tin nhắn</Text>
                       <Feather name="globe" size={20} color="#4b5563" />
                     </TouchableOpacity>
                   )}

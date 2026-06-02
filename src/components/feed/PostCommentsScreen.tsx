@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   View,
@@ -35,6 +35,7 @@ const COMMENT_REACTIONS = [
   { type: "haha", emoji: "😆" },
   { type: "wow", emoji: "😮" },
   { type: "sad", emoji: "😢" },
+  { type: "angry", emoji: "😡" },
 ];
 
 const reactionToEmoji: Record<string, string> = {
@@ -44,6 +45,15 @@ const reactionToEmoji: Record<string, string> = {
   wow: "😮",
   sad: "😢",
   angry: "😡",
+};
+
+const reactionToLabel: Record<string, string> = {
+  like: "Thích",
+  love: "Yêu thích",
+  haha: "Haha",
+  wow: "Wow",
+  sad: "Buồn",
+  angry: "Phẫn nộ",
 };
 
 export function PostCommentsScreen({
@@ -65,6 +75,14 @@ export function PostCommentsScreen({
   const [reactingCommentId, setReactingCommentId] = useState<string | null>(
     null,
   );
+  const [pickerCommentId, setPickerCommentId] = useState<string | null>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  const startReply = useCallback((comment: FeedComment) => {
+    setReplyTo(comment);
+    setPickerCommentId(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
 
   useEffect(() => {
     setPostPreview(post || null);
@@ -87,6 +105,7 @@ export function PostCommentsScreen({
     setIsLoading(true);
     setText("");
     setReplyTo(null);
+    setPickerCommentId(null);
     loadComments();
   }, [loadComments]);
 
@@ -111,9 +130,12 @@ export function PostCommentsScreen({
   const handleSend = async () => {
     if (!text.trim()) return;
 
+    // Trả lời 1 reply → gắn vào comment gốc để hiển thị đúng nhánh.
+    const parentId = replyTo ? replyTo.parentId || replyTo.id : null;
+
     setIsSubmitting(true);
     try {
-      await api.addComment(postId, text.trim(), replyTo?.id || null);
+      await api.addComment(postId, text.trim(), parentId);
       setText("");
       setReplyTo(null);
       await loadComments();
@@ -143,6 +165,7 @@ export function PostCommentsScreen({
 
   const handleReactComment = async (comment: FeedComment, type: string) => {
     if (!comment?.id) return;
+    setPickerCommentId(null);
     setReactingCommentId(comment.id);
     try {
       const response =
@@ -224,8 +247,40 @@ export function PostCommentsScreen({
 
             <View className="flex-row items-center mt-2">
               <TouchableOpacity
+                className={`flex-row items-center rounded-full border px-2.5 py-1 mr-2 ${item.viewerReaction ? "border-primary bg-blue-50" : "border-border bg-surface-secondary"}`}
+                onPress={() => {
+                  if (item.viewerReaction) {
+                    void handleReactComment(item, item.viewerReaction);
+                  } else {
+                    setPickerCommentId((prev) =>
+                      prev === item.id ? null : item.id,
+                    );
+                  }
+                }}
+                onLongPress={() =>
+                  setPickerCommentId((prev) =>
+                    prev === item.id ? null : item.id,
+                  )
+                }
+                delayLongPress={250}
+                disabled={reactingCommentId === item.id}
+                activeOpacity={0.75}
+              >
+                {activeReactionEmoji ? (
+                  <Text className="text-xs mr-1">{activeReactionEmoji}</Text>
+                ) : null}
+                <Text
+                  className={`text-[10px] font-semibold ${item.viewerReaction ? "text-primary" : "text-muted-foreground"}`}
+                >
+                  {item.viewerReaction
+                    ? reactionToLabel[String(item.viewerReaction)] || "Đã thả"
+                    : "Thích"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 className="rounded-full border border-border bg-surface-secondary px-2.5 py-1 mr-2"
-                onPress={() => setReplyTo(item)}
+                onPress={() => startReply(item)}
                 activeOpacity={0.75}
               >
                 <Text className="text-[10px] font-semibold text-muted-foreground">
@@ -233,15 +288,11 @@ export function PostCommentsScreen({
                 </Text>
               </TouchableOpacity>
 
-              {activeReactionEmoji ? (
-                <Text className="text-[10px] text-muted-foreground mr-2">
-                  Bạn đã thả {activeReactionEmoji}
+              {Number(item.reactionCount || 0) > 0 ? (
+                <Text className="text-[10px] text-muted-foreground">
+                  {Number(item.reactionCount || 0)} cảm xúc
                 </Text>
               ) : null}
-
-              <Text className="text-[10px] text-muted-foreground">
-                {Number(item.reactionCount || 0)} cảm xúc
-              </Text>
 
               {reactingCommentId === item.id ? (
                 <ActivityIndicator
@@ -252,24 +303,26 @@ export function PostCommentsScreen({
               ) : null}
             </View>
 
-            <View className="flex-row flex-wrap mt-2">
-              {COMMENT_REACTIONS.map((reaction) => {
-                const isActive = item.viewerReaction === reaction.type;
-                return (
-                  <TouchableOpacity
-                    key={`${item.id}-${reaction.type}`}
-                    className={`mr-2 mb-1 rounded-full border px-2 py-1 ${isActive ? "border-primary bg-blue-50" : "border-border bg-surface-secondary"}`}
-                    onPress={() => {
-                      void handleReactComment(item, reaction.type);
-                    }}
-                    disabled={reactingCommentId === item.id}
-                    activeOpacity={0.75}
-                  >
-                    <Text className="text-xs">{reaction.emoji}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {pickerCommentId === item.id ? (
+              <View className="flex-row mt-2 rounded-full border border-border bg-surface-secondary px-1 py-1 self-start">
+                {COMMENT_REACTIONS.map((reaction) => {
+                  const isActive = item.viewerReaction === reaction.type;
+                  return (
+                    <TouchableOpacity
+                      key={`${item.id}-${reaction.type}`}
+                      className={`w-9 h-9 items-center justify-center rounded-full ${isActive ? "bg-blue-50 border border-primary" : ""}`}
+                      onPress={() => {
+                        void handleReactComment(item, reaction.type);
+                      }}
+                      disabled={reactingCommentId === item.id}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={{ fontSize: 20 }}>{reaction.emoji}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
@@ -380,6 +433,7 @@ export function PostCommentsScreen({
 
           <View className="flex-row items-end">
             <TextInput
+              ref={inputRef}
               className="flex-1 min-h-11 max-h-30 rounded-2xl border border-border bg-surface-secondary px-4 py-2.5 text-sm text-foreground"
               placeholder={
                 replyTo

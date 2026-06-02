@@ -43,7 +43,7 @@ export function ComposeConversationModal({
         <View className="bg-surface rounded-t-3xl max-h-[85%] pb-5">
           <View className="px-4 py-4 border-b border-border flex-row items-center justify-between">
             <Text className="text-foreground text-base font-bold">
-              Tao nhom tro chuyen
+              Tạo nhóm trò chuyện
             </Text>
             <TouchableOpacity onPress={onClose}>
               <Text className="text-muted-foreground text-2xl font-light">×</Text>
@@ -53,7 +53,7 @@ export function ComposeConversationModal({
           <View className="px-4 pt-3">
             <TextInput
               className="h-11 rounded-xl border border-border bg-surface-secondary px-4 text-sm text-foreground"
-              placeholder="Ten nhom"
+              placeholder="Tên nhóm"
               placeholderTextColor="#7e8592"
               value={groupName}
               onChangeText={onChangeGroupName}
@@ -63,7 +63,7 @@ export function ComposeConversationModal({
           <SearchBar
             value={composeKeyword}
             onChangeText={onChangeComposeKeyword}
-            placeholder="Tim ban be de them vao nhom..."
+            placeholder="Tìm bạn bè để thêm vào nhóm..."
           />
 
           <FlatList
@@ -79,12 +79,12 @@ export function ComposeConversationModal({
                 >
                   <View>
                     <Text className="text-foreground font-semibold text-sm">{item.name}</Text>
-                    <Text className="text-muted-foreground text-xs mt-0.5">Ban be</Text>
+                    <Text className="text-muted-foreground text-xs mt-0.5">Bạn bè</Text>
                   </View>
                   <Text
                     className={`text-xs font-semibold ${checked ? "text-primary" : "text-muted-foreground"}`}
                   >
-                    {checked ? "Da chon" : "Chon"}
+                    {checked ? "Đã chọn" : "Chọn"}
                   </Text>
                 </TouchableOpacity>
               );
@@ -107,7 +107,7 @@ export function ComposeConversationModal({
               onPress={onCreateGroup}
             >
               <Text className="text-white font-semibold text-sm">
-                {isSubmittingCompose ? "Dang tao nhom..." : "Tao nhom"}
+                {isSubmittingCompose ? "Đang tạo nhóm..." : "Tạo nhóm"}
               </Text>
             </TouchableOpacity>
           </View>

@@ -88,7 +88,7 @@ export function MessageBubble({
     (r) => Number(r.userId) !== Number(currentUserId),
   );
   const textValue = message.isRecalled
-    ? "Tin nhan da duoc thu hoi"
+    ? "Tin nhắn đã được thu hồi"
     : message.content;
   const imageRatio = useMemo(() => {
     if (message.type !== "image") return 1;
@@ -113,7 +113,7 @@ export function MessageBubble({
     if (!fileUrl) return;
     const canOpen = await Linking.canOpenURL(fileUrl);
     if (!canOpen) {
-      Alert.alert("Khong mo duoc tep", "Duong dan tep khong hop le.");
+      Alert.alert("Không mở được tệp", "Đường dẫn tệp không hợp lệ.");
       return;
     }
     await Linking.openURL(fileUrl);
@@ -161,9 +161,9 @@ export function MessageBubble({
                 style={{ fontSize: 11, color: isMe ? "rgba(255,255,255,0.75)" : "#6b7280" }}
                 numberOfLines={1}
               >
-                {message.replyTo.type === "image" ? "🖼 Anh"
+                {message.replyTo.type === "image" ? "🖼 Ảnh"
                   : message.replyTo.type === "video" ? "📹 Video"
-                  : message.replyTo.type === "file" ? "📎 Tep"
+                  : message.replyTo.type === "file" ? "📎 Tệp"
                   : String(message.replyTo.content || "")}
               </Text>
             </View>
@@ -223,10 +223,10 @@ export function MessageBubble({
                 }`}
                 numberOfLines={1}
               >
-                {message.fileName || "Tep dinh kem"}
+                {message.fileName || "Tệp đính kèm"}
               </Text>
               <Text className={`text-[10px] mt-1 ${isMe ? "text-white/75" : "text-muted-foreground"}`}>
-                Cham de mo tep
+                Chạm để mở tệp
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -244,13 +244,13 @@ export function MessageBubble({
                   isMe ? "text-white" : "text-foreground"
                 }`}
               >
-                Bai viet da chia se
+                Bài viết đã chia sẻ
               </Text>
               {sharedPostMeta.postAuthor ? (
                 <Text
                   className={`text-[11px] mb-1 ${isMe ? "text-white/90" : "text-muted-foreground"}`}
                 >
-                  Tac gia: {sharedPostMeta.postAuthor}
+                  Tác giả: {sharedPostMeta.postAuthor}
                 </Text>
               ) : null}
               {sharedPostMeta.postContent ? (
@@ -262,7 +262,7 @@ export function MessageBubble({
                 </Text>
               ) : null}
               <Text className={`text-[10px] mt-1 ${isMe ? "text-white/75" : "text-primary"}`}>
-                Nhan de mo bai viet
+                Nhấn để mở bài viết
               </Text>
             </TouchableOpacity>
           ) : null}

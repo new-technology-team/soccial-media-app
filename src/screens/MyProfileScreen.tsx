@@ -16,7 +16,7 @@ interface MyProfileScreenProps {
 
 type ProfileTab = "posts" | "shares" | "saved";
 
-const SHARE_PREFIX = "Chia se bai viet cua ";
+const SHARE_PREFIX = "Chia sẻ bài viết của ";
 
 function isSharedPost(post: FeedPost) {
   return String(post.content || "").startsWith(SHARE_PREFIX);

@@ -94,7 +94,7 @@ export function useFriendsData({ currentUserId }: UseFriendsDataArgs) {
           .slice(0, 20)
           .map((item) => ({
             id: item.id,
-            fullName: item.fullName || "Nguoi dung",
+            fullName: item.fullName || "Người dùng",
             username: item.email || item.phone || undefined,
             avatarUrl: item.avatarUrl || undefined,
           }));
@@ -129,11 +129,11 @@ export function useFriendsData({ currentUserId }: UseFriendsDataArgs) {
       setLoading(targetId, true);
       try {
         await api.sendFriendRequest(targetId);
-        Alert.alert("Da gui", `Da gui loi moi ket ban den ${name}`);
+        Alert.alert("Đã gửi", `Đã gửi lời mời kết bạn đến ${name}`);
       } catch (err) {
         Alert.alert(
-          "Loi",
-          err instanceof Error ? err.message : "Khong the gui loi moi",
+          "Lỗi",
+          err instanceof Error ? err.message : "Không thể gửi lời mời",
         );
       } finally {
         setLoading(targetId, false);
@@ -151,11 +151,11 @@ export function useFriendsData({ currentUserId }: UseFriendsDataArgs) {
           prev.filter((item) => item.id !== requesterUserId),
         );
         await loadFriends();
-        Alert.alert("Thanh cong", "Da chap nhan loi moi ket ban");
+        Alert.alert("Thành công", "Đã chấp nhận lời mời kết bạn");
       } catch (err) {
         Alert.alert(
-          "Loi",
-          err instanceof Error ? err.message : "Khong the chap nhan",
+          "Lỗi",
+          err instanceof Error ? err.message : "Không thể chấp nhận",
         );
       } finally {
         setLoading(requesterUserId, false);
@@ -174,8 +174,8 @@ export function useFriendsData({ currentUserId }: UseFriendsDataArgs) {
         );
       } catch (err) {
         Alert.alert(
-          "Loi",
-          err instanceof Error ? err.message : "Khong the tu choi",
+          "Lỗi",
+          err instanceof Error ? err.message : "Không thể từ chối",
         );
       } finally {
         setLoading(requesterUserId, false);
@@ -186,10 +186,10 @@ export function useFriendsData({ currentUserId }: UseFriendsDataArgs) {
 
   const handleRemoveFriend = useCallback(
     (friendId: number, name: string) => {
-      Alert.alert("Xoa ban be", `Ban co muon huy ket ban voi ${name}?`, [
-        { text: "Huy", style: "cancel" },
+      Alert.alert("Xóa bạn bè", `Bạn có muốn hủy kết bạn với ${name}?`, [
+        { text: "Hủy", style: "cancel" },
         {
-          text: "Xoa",
+          text: "Xóa",
           style: "destructive",
           onPress: async () => {
             setLoading(friendId, true);
@@ -198,8 +198,8 @@ export function useFriendsData({ currentUserId }: UseFriendsDataArgs) {
               setFriends((prev) => prev.filter((item) => item.id !== friendId));
             } catch (err) {
               Alert.alert(
-                "Loi",
-                err instanceof Error ? err.message : "Khong the xoa",
+                "Lỗi",
+                err instanceof Error ? err.message : "Không thể xóa",
               );
             } finally {
               setLoading(friendId, false);

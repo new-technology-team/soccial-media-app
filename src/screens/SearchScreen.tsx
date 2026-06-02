@@ -10,7 +10,7 @@ import type { AuthUser, FeedPost } from "../types";
 
 interface SearchScreenProps {
   user: AuthUser;
-  onOpenPost?: (postId: string) => void;
+  onOpenPost?: (postId: string, options?: { openComments?: boolean }) => void;
   onOpenUserProfile?: (userId: number) => void;
   onOpenAIChat?: () => void;
   initialQuery?: string;
@@ -108,28 +108,28 @@ export function SearchScreen({
   }, [savedPostIds]);
 
   const handleReportPost = useCallback((post: FeedPost) => {
-    Alert.alert("Tuy chon bai viet", "Chon thao tac", [
+    Alert.alert("Tùy chọn bài viết", "Chọn thao tác", [
       {
-        text: "Bao cao bai viet",
+        text: "Báo cáo bài viết",
         style: "destructive",
         onPress: () => {
           void api
             .submitReport({
               targetType: "post",
               targetId: post.id,
-              reason: "Noi dung khong phu hop tren kham pha",
-              details: `Bai viet tu ${post.authorName}`,
+              reason: "Nội dung không phù hợp trên khám phá",
+              details: `Bài viết từ ${post.authorName}`,
             })
-            .then(() => Alert.alert("Da bao cao", "Cam on ban da gui phan hoi."))
+            .then(() => Alert.alert("Đã báo cáo", "Cảm ơn bạn đã gửi phản hồi."))
             .catch((err) =>
               Alert.alert(
-                "Bao cao that bai",
-                err instanceof Error ? err.message : "Khong the gui bao cao",
+                "Báo cáo thất bại",
+                err instanceof Error ? err.message : "Không thể gửi báo cáo",
               ),
             );
         },
       },
-      { text: "Huy", style: "cancel" },
+      { text: "Hủy", style: "cancel" },
     ]);
   }, []);
 
@@ -244,7 +244,7 @@ export function SearchScreen({
                 isSaved={savedPostIds.has(String(item.id))}
                 onLike={() => { void handleLike(item); }}
                 onReact={(type) => { void handleReact(item, type); }}
-                onComment={() => onOpenPost?.(item.id)}
+                onComment={() => onOpenPost?.(item.id, { openComments: true })}
                 onShare={() => onOpenPost?.(item.id)}
                 onSave={() => { void handleSave(item); }}
                 onMenu={() => handleReportPost(item)}

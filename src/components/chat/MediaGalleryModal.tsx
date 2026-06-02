@@ -68,16 +68,16 @@ export function MediaGalleryModal({
     if (!url) return;
     const ok = await Linking.canOpenURL(url);
     if (!ok) {
-      Alert.alert("Khong mo duoc", "Duong dan khong hop le.");
+      Alert.alert("Không mở được", "Đường dẫn không hợp lệ.");
       return;
     }
     await Linking.openURL(url);
   };
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "photos", label: "Anh/Video", count: photosVideos.length },
-    { key: "files", label: "Tep", count: files.length },
-    { key: "links", label: "Lien ket", count: links.length },
+    { key: "photos", label: "Ảnh/Video", count: photosVideos.length },
+    { key: "files", label: "Tệp", count: files.length },
+    { key: "links", label: "Liên kết", count: links.length },
   ];
 
   return (
@@ -94,7 +94,7 @@ export function MediaGalleryModal({
           </TouchableOpacity>
           <View className="flex-1">
             <Text className="text-base font-bold text-foreground" numberOfLines={1}>
-              Noi dung da chia se
+              Nội dung đã chia sẻ
             </Text>
             {conversationName ? (
               <Text className="text-xs text-muted-foreground" numberOfLines={1}>
@@ -163,7 +163,7 @@ export function MediaGalleryModal({
               !isLoading ? (
                 <View className="flex-1 py-20 items-center">
                   <Text className="text-4xl mb-3">🖼️</Text>
-                  <Text className="text-sm text-muted-foreground">Chua co anh hoac video nao</Text>
+                  <Text className="text-sm text-muted-foreground">Chưa có ảnh hoặc video nào</Text>
                 </View>
               ) : null
             }
@@ -184,7 +184,7 @@ export function MediaGalleryModal({
                 </View>
                 <View className="flex-1">
                   <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
-                    {item.fileName || "Tep dinh kem"}
+                    {item.fileName || "Tệp đính kèm"}
                   </Text>
                   <Text className="text-xs text-muted-foreground mt-0.5">
                     {formatTime(item.createdAt)}
@@ -198,7 +198,7 @@ export function MediaGalleryModal({
               !isLoading ? (
                 <View className="py-20 items-center">
                   <Text className="text-4xl mb-3">📎</Text>
-                  <Text className="text-sm text-muted-foreground">Chua co tep nao duoc chia se</Text>
+                  <Text className="text-sm text-muted-foreground">Chưa có tệp nào được chia sẻ</Text>
                 </View>
               ) : null
             }
@@ -218,7 +218,7 @@ export function MediaGalleryModal({
                   activeOpacity={0.8}
                 >
                   <Text className="text-primary text-xs font-semibold mb-1" numberOfLines={1}>
-                    {url || "Lien ket"}
+                    {url || "Liên kết"}
                   </Text>
                   {item.content && item.content !== url ? (
                     <Text className="text-sm text-foreground" numberOfLines={2}>
@@ -235,7 +235,7 @@ export function MediaGalleryModal({
               !isLoading ? (
                 <View className="py-20 items-center">
                   <Text className="text-4xl mb-3">🔗</Text>
-                  <Text className="text-sm text-muted-foreground">Chua co lien ket nao duoc chia se</Text>
+                  <Text className="text-sm text-muted-foreground">Chưa có liên kết nào được chia sẻ</Text>
                 </View>
               ) : null
             }

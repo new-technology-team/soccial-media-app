@@ -12,13 +12,22 @@ const isVideoUrl = (url: string | null | undefined) => {
 };
 
 const REACTIONS = [
-  { type: "like",  emoji: "👍" },
-  { type: "love",  emoji: "❤️" },
-  { type: "haha",  emoji: "😆" },
-  { type: "wow",   emoji: "😮" },
-  { type: "sad",   emoji: "😢" },
-  { type: "angry", emoji: "😡" },
+  { type: "like",  emoji: "👍", label: "Thích" },
+  { type: "love",  emoji: "❤️", label: "Yêu thích" },
+  { type: "haha",  emoji: "😆", label: "Haha" },
+  { type: "wow",   emoji: "😮", label: "Wow" },
+  { type: "sad",   emoji: "😢", label: "Buồn" },
+  { type: "angry", emoji: "😡", label: "Phẫn nộ" },
 ];
+
+const REACTION_COLORS: Record<string, string> = {
+  like: "#0052ce",
+  love: "#e0245e",
+  haha: "#f59e0b",
+  wow: "#f59e0b",
+  sad: "#f59e0b",
+  angry: "#f4540c",
+};
 
 interface PostCardProps {
   post: FeedPost;
@@ -91,6 +100,13 @@ export function PostCard({
     onReact?.(type);
   };
 
+  const activeReaction = post.viewerReaction
+    ? REACTIONS.find((r) => r.type === post.viewerReaction)
+    : null;
+  const activeColor = activeReaction
+    ? REACTION_COLORS[activeReaction.type] || "#0052ce"
+    : "#6b7280";
+
 
   return (
     <View className="bg-surface rounded-2xl p-4 mb-3 shadow-sm">
@@ -141,53 +157,57 @@ export function PostCard({
       {/* Emoji Picker (inline, shows on long press) */}
       {showEmojiPicker && (
         <View className="flex-row justify-around bg-surface-secondary rounded-2xl border border-border px-2 py-2 mb-3">
-          {REACTIONS.map(({ type, emoji }) => (
-            <TouchableOpacity
-              key={type}
-              className="w-10 h-10 items-center justify-center rounded-full"
-              onPress={() => handlePickEmoji(type)}
-              activeOpacity={0.75}
-            >
-              <Text style={{ fontSize: 22 }}>{emoji}</Text>
-            </TouchableOpacity>
-          ))}
+          {REACTIONS.map(({ type, emoji }) => {
+            const isActive = post.viewerReaction === type;
+            return (
+              <TouchableOpacity
+                key={type}
+                className={`w-10 h-10 items-center justify-center rounded-full ${isActive ? "bg-blue-50 border border-primary" : ""}`}
+                onPress={() => handlePickEmoji(type)}
+                activeOpacity={0.75}
+              >
+                <Text style={{ fontSize: 22 }}>{emoji}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       )}
 
       {/* Action Buttons */}
       <View className="flex-row">
         <TouchableOpacity
-          className="flex-1 items-center py-2"
+          className="flex-1 flex-row items-center justify-center py-2"
           onPress={handleHeartTap}
           onLongPress={handleHeartLongPress}
-          delayLongPress={350}
+          delayLongPress={300}
           activeOpacity={0.75}
         >
-          <Feather
-            name="heart"
-            size={18}
-            color={post.viewerReaction ? "#0052ce" : "#6b7280"}
-          />
+          {activeReaction ? (
+            <Text style={{ fontSize: 16 }}>{activeReaction.emoji}</Text>
+          ) : (
+            <Feather name="heart" size={18} color="#6b7280" />
+          )}
           <Text
-            className={`text-xs font-semibold mt-1 ${post.viewerReaction ? "text-primary" : "text-muted-foreground"}`}
+            className="text-xs font-semibold ml-1.5"
+            style={{ color: activeColor }}
           >
-            {post.viewerReaction ? "Đã thích" : "Thích"}
+            {activeReaction ? activeReaction.label : "Thích"}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity className="flex-1 items-center py-2" onPress={onComment} activeOpacity={0.75}>
+        <TouchableOpacity className="flex-1 flex-row items-center justify-center py-2" onPress={onComment} activeOpacity={0.75}>
           <Feather name="message-circle" size={18} color="#6b7280" />
-          <Text className="text-xs text-muted-foreground font-semibold mt-1">Bình luận</Text>
+          <Text className="text-xs text-muted-foreground font-semibold ml-1.5">Bình luận</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity className="flex-1 items-center py-2" onPress={onShare} activeOpacity={0.75}>
+        <TouchableOpacity className="flex-1 flex-row items-center justify-center py-2" onPress={onShare} activeOpacity={0.75}>
           <Feather name="share-2" size={18} color="#6b7280" />
-          <Text className="text-xs text-muted-foreground font-semibold mt-1">Chia sẻ</Text>
+          <Text className="text-xs text-muted-foreground font-semibold ml-1.5">Chia sẻ</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity className="flex-1 items-center py-2" onPress={onSave} activeOpacity={0.75}>
+        <TouchableOpacity className="flex-1 flex-row items-center justify-center py-2" onPress={onSave} activeOpacity={0.75}>
           <Feather name="bookmark" size={18} color={isSaved ? "#0052ce" : "#6b7280"} />
-          <Text className={`text-xs font-semibold mt-1 ${isSaved ? "text-primary" : "text-muted-foreground"}`}>
+          <Text className={`text-xs font-semibold ml-1.5 ${isSaved ? "text-primary" : "text-muted-foreground"}`}>
             {isSaved ? "Đã lưu" : "Lưu"}
           </Text>
         </TouchableOpacity>

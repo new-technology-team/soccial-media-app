@@ -35,7 +35,7 @@ export function FriendsSearchInput({
           fontSize: 14,
           color: "#111827",
         }}
-        placeholder="Tim theo ten hoac email..."
+        placeholder="Tìm theo tên hoặc email..."
         placeholderTextColor="#9ca3af"
         value={value}
         onChangeText={onChangeText}

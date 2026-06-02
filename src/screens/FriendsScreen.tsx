@@ -70,7 +70,7 @@ export function FriendsScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <TopBar title="Ban be" />
+      <TopBar title="Bạn bè" />
 
       <FriendsTabs
         activeTab={activeTab}
@@ -99,8 +99,8 @@ export function FriendsScreen({
             <FriendsListPlaceholder
               loading={isLoadingFriends}
               icon="👥"
-              title="Chua co ban be nao"
-              subtitle="Chuyen sang tab Tim ban de ket noi them ban moi."
+              title="Chưa có bạn bè nào"
+              subtitle="Chuyển sang tab Tìm bạn để kết nối thêm bạn mới."
             />
           }
           contentContainerStyle={{ paddingBottom: 100 }}
@@ -120,7 +120,7 @@ export function FriendsScreen({
               loading={isLoadingPending}
               icon="📬"
               title="Không có lời mời nào"
-              subtitle="Khi có người gửi lời mời kết bạn, chúng sẽ hiện thị ở đây."
+              subtitle="Khi có người gửi lời mời kết bạn, chúng sẽ hiển thị ở đây."
             />
           }
           contentContainerStyle={{ paddingBottom: 100 }}
@@ -144,7 +144,7 @@ export function FriendsScreen({
               <FriendsListPlaceholder
                 loading={false}
                 icon="🔍"
-                title={searchKeyword.length >= 2 ? "Khong tim thay nguoi dung" : "Tim kiem ban be"}
+                title={searchKeyword.length >= 2 ? "Không tìm thấy người dùng" : "Tìm kiếm bạn bè"}
                 subtitle={
                   searchKeyword.length >= 2
                     ? "Thử lại với từ khóa khác"

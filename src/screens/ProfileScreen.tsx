@@ -113,14 +113,14 @@ export function ProfileScreen({
         dateOfBirth: dateOfBirth || null,
         gender: gender ? normalizeGender(gender) : null,
       });
-      setStatus("Cap nhat ho so thanh cong");
+      setStatus("Cập nhật hồ sơ thành công");
       onUserUpdated?.(res.user);
       setFullName(res.user.fullName);
       setDateOfBirth(res.user.dateOfBirth || "");
       setGender(res.user.gender || "");
       setAvatarUrl(res.user.avatarUrl || null);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Cap nhat that bai");
+      setStatus(err instanceof Error ? err.message : "Cập nhật thất bại");
     } finally {
       setIsSaving(false);
     }
@@ -130,7 +130,7 @@ export function ProfileScreen({
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        setStatus("Vui long cap quyen thu vien anh de doi avatar");
+        setStatus("Vui lòng cấp quyền thư viện ảnh để đổi avatar");
         return;
       }
 
@@ -143,13 +143,13 @@ export function ProfileScreen({
       if (result.canceled || !result.assets?.length) return;
       const asset = result.assets[0];
       if (!asset.base64) {
-        setStatus("Khong doc duoc du lieu anh");
+        setStatus("Không đọc được dữ liệu ảnh");
         return;
       }
 
       const approxBytes = Math.floor((asset.base64.length * 3) / 4);
       if (approxBytes > 8 * 1024 * 1024) {
-        setStatus("Anh qua lon. Vui long chon anh nho hon 8MB");
+        setStatus("Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn 8MB");
         return;
       }
 
@@ -163,15 +163,15 @@ export function ProfileScreen({
       });
 
       if (!uploaded.fileUrl) {
-        throw new Error("Khong nhan duoc URL avatar tu server");
+        throw new Error("Không nhận được URL avatar từ server");
       }
 
       const res = await api.updateProfile({ avatarUrl: uploaded.fileUrl });
       onUserUpdated?.(res.user);
       setAvatarUrl(res.user.avatarUrl || uploaded.fileUrl);
-      setStatus("Cap nhat avatar thanh cong");
+      setStatus("Cập nhật avatar thành công");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Upload avatar that bai");
+      setStatus(err instanceof Error ? err.message : "Tải avatar lên thất bại");
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -179,7 +179,7 @@ export function ProfileScreen({
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword) {
-      setStatus("Vui long nhap day du mat khau");
+      setStatus("Vui lòng nhập đầy đủ mật khẩu");
       return;
     }
 
@@ -187,12 +187,12 @@ export function ProfileScreen({
     setStatus("");
     try {
       await api.changePassword({ currentPassword, newPassword });
-      setStatus("Doi mat khau thanh cong");
+      setStatus("Đổi mật khẩu thành công");
       setCurrentPassword("");
       setNewPassword("");
       setShowSettingsModal(false);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Doi mat khau that bai");
+      setStatus(err instanceof Error ? err.message : "Đổi mật khẩu thất bại");
     } finally {
       setIsSaving(false);
     }
@@ -201,8 +201,8 @@ export function ProfileScreen({
   return (
     <View className="flex-1 bg-background">
       <TopBar
-        title="Cai dat"
-        leftAction={onBack ? { label: "Quay lai", onPress: onBack } : undefined}
+        title="Cài đặt"
+        leftAction={onBack ? { label: "Quay lại", onPress: onBack } : undefined}
         rightAction={
           !onBack ? (
             <TouchableOpacity
@@ -228,7 +228,7 @@ export function ProfileScreen({
               {fullName || user.fullName}
             </Text>
             <Text className="text-muted-foreground text-xs">
-              {user.email || user.phone || "Tai khoan ZChat"}
+              {user.email || user.phone || "Tài khoản ZChat"}
             </Text>
 
             <TouchableOpacity
@@ -246,7 +246,7 @@ export function ProfileScreen({
                   <Feather name="camera" size={14} color="#0052ce" />
                 )}
                 <Text className="text-primary font-semibold text-xs ml-2">
-                  {isUploadingAvatar ? "Dang upload..." : "Doi avatar"}
+                  {isUploadingAvatar ? "Đang tải lên..." : "Đổi avatar"}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -255,31 +255,31 @@ export function ProfileScreen({
 
         <Card style={{ marginBottom: 12 }}>
           <Text className="text-base font-bold text-foreground mb-2">
-            Thong tin ca nhan
+            Thông tin cá nhân
           </Text>
           <Text className="text-xs text-muted-foreground mb-4">
-            Cap nhat thong tin co ban de dong bo giua mobile va web.
+            Cập nhật thông tin cơ bản để đồng bộ giữa mobile và web.
           </Text>
           <Input
-            label="Ho va ten"
-            placeholder="Ho va ten"
+            label="Họ và tên"
+            placeholder="Họ và tên"
             value={fullName}
             onChangeText={setFullName}
           />
           <Input
-            label="Ngay sinh"
+            label="Ngày sinh"
             placeholder="YYYY-MM-DD"
             value={dateOfBirth}
             onChangeText={setDateOfBirth}
           />
           <Input
-            label="Gioi tinh"
-            placeholder="Nam / Nu / Khac"
+            label="Giới tính"
+            placeholder="Nam / Nữ / Khác"
             value={gender}
             onChangeText={setGender}
           />
           <Button
-            title={isSaving ? "Dang luu..." : "Luu thay doi"}
+            title={isSaving ? "Đang lưu..." : "Lưu thay đổi"}
             onPress={() => {
               void handleSave();
             }}
@@ -292,34 +292,34 @@ export function ProfileScreen({
             activeOpacity={0.8}
           >
             <Text className="text-sm font-semibold text-foreground">
-              Quan ly tai khoan va mat khau
+              Quản lý tài khoản và mật khẩu
             </Text>
           </TouchableOpacity>
         </Card>
 
         <Card style={{ marginBottom: 12 }}>
           <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-base font-bold text-foreground">Quyen rieng tu</Text>
+            <Text className="text-base font-bold text-foreground">Quyền riêng tư</Text>
             {isLoadingPrivacy ? <ActivityIndicator size="small" color="#0052ce" /> : null}
           </View>
 
           {[
             {
               key: "privacyLastSeen" as const,
-              label: "Hien thi lan cuoi hoat dong",
-              desc: "Nguoi khac co the thay ban hoat dong khi nao",
+              label: "Hiển thị lần cuối hoạt động",
+              desc: "Người khác có thể thấy bạn hoạt động khi nào",
               value: privacyLastSeen,
             },
             {
               key: "privacyProfilePhoto" as const,
-              label: "Anh dai dien cong khai",
-              desc: "Tat ca moi nguoi co the xem anh dai dien cua ban",
+              label: "Ảnh đại diện công khai",
+              desc: "Tất cả mọi người có thể xem ảnh đại diện của bạn",
               value: privacyProfilePhoto,
             },
             {
               key: "allowFriendRequests" as const,
-              label: "Nhan loi moi ket ban",
-              desc: "Cho phep nguoi khac gui loi moi ket ban den ban",
+              label: "Nhận lời mời kết bạn",
+              desc: "Cho phép người khác gửi lời mời kết bạn đến bạn",
               value: allowFriendRequests,
             },
           ].map((item, index, arr) => (
@@ -374,7 +374,7 @@ export function ProfileScreen({
 
                 <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-foreground text-base font-bold">
-                    Cai dat tai khoan
+                    Cài đặt tài khoản
                   </Text>
                   <TouchableOpacity onPress={() => setShowSettingsModal(false)}>
                     <Feather name="x" size={20} color="#6b7280" />
@@ -382,18 +382,18 @@ export function ProfileScreen({
                 </View>
 
                 <Text className="text-xs text-muted-foreground mb-3">
-                  Doi mat khau va quan ly tai khoan trong khu vuc nay.
+                  Đổi mật khẩu và quản lý tài khoản trong khu vực này.
                 </Text>
 
                 <Input
-                  label="Mat khau hien tai"
+                  label="Mật khẩu hiện tại"
                   placeholder="********"
                   value={currentPassword}
                   onChangeText={setCurrentPassword}
                   secureTextEntry
                 />
                 <Input
-                  label="Mat khau moi"
+                  label="Mật khẩu mới"
                   placeholder="********"
                   value={newPassword}
                   onChangeText={setNewPassword}
@@ -401,7 +401,7 @@ export function ProfileScreen({
                 />
 
                 <Button
-                  title={isSaving ? "Dang doi mat khau..." : "Doi mat khau"}
+                  title={isSaving ? "Đang đổi mật khẩu..." : "Đổi mật khẩu"}
                   onPress={() => {
                     void handleChangePassword();
                   }}
@@ -414,7 +414,7 @@ export function ProfileScreen({
                   <View className="h-11 rounded-xl border border-red-200 bg-red-50 flex-row items-center justify-center">
                     <Feather name="log-out" size={14} color="#dc2626" />
                     <Text className="text-danger font-semibold text-sm ml-2">
-                      Dang xuat
+                      Đăng xuất
                     </Text>
                   </View>
                 </Pressable>

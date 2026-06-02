@@ -85,8 +85,8 @@ export function PostComposer({
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          "Thieu quyen truy cap",
-          "Vui long cho phep ung dung truy cap thu vien anh.",
+          "Thiếu quyền truy cập",
+          "Vui lòng cho phép ứng dụng truy cập thư viện ảnh.",
         );
         return;
       }
@@ -101,15 +101,15 @@ export function PostComposer({
 
       const asset = result.assets[0];
       if (!asset.base64) {
-        Alert.alert("Upload that bai", "Khong doc duoc du lieu anh.");
+        Alert.alert("Tải lên thất bại", "Không đọc được dữ liệu ảnh.");
         return;
       }
 
       const approxBytes = Math.floor((asset.base64.length * 3) / 4);
       if (approxBytes > 8 * 1024 * 1024) {
         Alert.alert(
-          "Upload that bai",
-          "Anh qua lon. Vui long chon anh nho hon 8MB.",
+          "Tải lên thất bại",
+          "Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn 8MB.",
         );
         return;
       }
@@ -122,14 +122,14 @@ export function PostComposer({
       });
 
       if (!uploaded.fileUrl) {
-        throw new Error("Khong nhan duoc URL anh tu server.");
+        throw new Error("Không nhận được URL ảnh từ server.");
       }
 
       setMediaUrl(uploaded.fileUrl);
     } catch (err) {
       Alert.alert(
-        "Upload that bai",
-        err instanceof Error ? err.message : "Khong the upload anh",
+        "Tải lên thất bại",
+        err instanceof Error ? err.message : "Không thể tải ảnh lên",
       );
     } finally {
       setIsUploadingMedia(false);
@@ -160,10 +160,10 @@ export function PostComposer({
             <View className="bg-surface rounded-t-3xl p-6 pb-8">
               <View className="flex-row justify-between items-center mb-4">
                 <TouchableOpacity onPress={onClose}>
-                  <Text className="text-muted-foreground text-sm">Huy</Text>
+                  <Text className="text-muted-foreground text-sm">Hủy</Text>
                 </TouchableOpacity>
                 <Text className="text-base font-bold text-foreground">
-                  {mode === "edit" ? "Chinh sua bai viet" : "Tao bai viet"}
+                  {mode === "edit" ? "Chỉnh sửa bài viết" : "Tạo bài viết"}
                 </Text>
                 <TouchableOpacity
                   onPress={handleSubmit}
@@ -173,10 +173,10 @@ export function PostComposer({
                     className={`font-bold text-sm ${content.trim() || mediaUrl.trim() ? "text-primary" : "text-muted-foreground"}`}
                   >
                     {isPosting
-                      ? "Dang luu..."
+                      ? "Đang lưu..."
                       : mode === "edit"
-                        ? "Luu"
-                        : "Dang"}
+                        ? "Lưu"
+                        : "Đăng"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -188,7 +188,7 @@ export function PostComposer({
                     {userName}
                   </Text>
                   <Text className="text-muted-foreground text-xs">
-                    {visibility === "public" ? "Cong khai" : "Rieng tu"}
+                    {visibility === "public" ? "Công khai" : "Riêng tư"}
                   </Text>
                 </View>
               </View>
@@ -201,7 +201,7 @@ export function PostComposer({
                   <Text
                     className={`text-xs font-semibold ${visibility === "public" ? "text-white" : "text-foreground"}`}
                   >
-                    Cong khai
+                    Công khai
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -211,7 +211,7 @@ export function PostComposer({
                   <Text
                     className={`text-xs font-semibold ${visibility === "private" ? "text-white" : "text-foreground"}`}
                   >
-                    Rieng tu
+                    Riêng tư
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -219,7 +219,7 @@ export function PostComposer({
               <View className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
                 <TextInput
                   className="min-h-30 max-h-55 text-sm text-foreground text-start"
-                  placeholder="Ban dang nghi gi?"
+                  placeholder="Bạn đang nghĩ gì?"
                   placeholderTextColor="#7e8592"
                   multiline
                   value={content}
@@ -234,14 +234,14 @@ export function PostComposer({
                 activeOpacity={0.7}
               >
                 <Text className="text-xs text-primary font-semibold">
-                  An ban phim
+                  Ẩn bàn phím
                 </Text>
               </TouchableOpacity>
 
               <View className="rounded-xl border border-border bg-surface-secondary px-4 mt-3">
                 <TextInput
                   className="h-11 text-sm text-foreground"
-                  placeholder="Dan link anh/video (tuy chon)"
+                  placeholder="Dán link ảnh/video (tùy chọn)"
                   placeholderTextColor="#7e8592"
                   value={mediaUrl}
                   onChangeText={setMediaUrl}
@@ -260,8 +260,8 @@ export function PostComposer({
                 >
                   <Text className="text-foreground text-xs font-semibold">
                     {isUploadingMedia
-                      ? "Dang upload anh..."
-                      : "Chon anh tu may"}
+                      ? "Đang tải ảnh lên..."
+                      : "Chọn ảnh từ máy"}
                   </Text>
                 </TouchableOpacity>
                 {isUploadingMedia ? (

@@ -82,7 +82,7 @@ export function FeedScreen({
       const res = await api.listFeed();
       setPosts(res.posts || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Tai bang tin that bai");
+      setError(err instanceof Error ? err.message : "Tải bảng tin thất bại");
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -229,7 +229,7 @@ export function FeedScreen({
       const res = await api.listFriends();
       setShareFriends((res.friends || []).map((friend) => ({
         id: Number(friend.id),
-        name: String(friend.name || "Ban be"),
+        name: String(friend.name || "Bạn bè"),
       })));
     } catch {
       setShareFriends([]);
@@ -251,7 +251,7 @@ export function FeedScreen({
     try {
       const note = shareNote.trim();
       const sourceContent = sharePost.content || "";
-      const composed = `Chia se bai viet cua ${sharePost.authorName}\n${note ? `${note}\n` : ""}${sourceContent}`.trim();
+      const composed = `Chia sẻ bài viết của ${sharePost.authorName}\n${note ? `${note}\n` : ""}${sourceContent}`.trim();
       const res = await api.createPost({
         content: composed || undefined,
         mediaUrl: sharePost.mediaUrl || undefined,
@@ -262,8 +262,8 @@ export function FeedScreen({
       void loadFeed();
     } catch (err) {
       Alert.alert(
-        "Chia se that bai",
-        err instanceof Error ? err.message : "Khong the chia se bai viet",
+        "Chia sẻ thất bại",
+        err instanceof Error ? err.message : "Không thể chia sẻ bài viết",
       );
       setIsSharing(false);
     }
@@ -282,11 +282,11 @@ export function FeedScreen({
         postMediaUrl: sharePost.mediaUrl || "",
       });
       closeShareModal();
-      Alert.alert("Da chia se", "Da gui bai viet cho ban be.");
+      Alert.alert("Đã chia sẻ", "Đã gửi bài viết cho bạn bè.");
     } catch (err) {
       Alert.alert(
-        "Chia se that bai",
-        err instanceof Error ? err.message : "Khong the gui bai viet",
+        "Chia sẻ thất bại",
+        err instanceof Error ? err.message : "Không thể gửi bài viết",
       );
       setIsSharing(false);
     }
@@ -294,7 +294,7 @@ export function FeedScreen({
 
   const handleHidePost = (post: FeedPost) => {
     setHiddenPostIds((prev) => ({ ...prev, [post.id]: true }));
-    Alert.alert("Da an", "Bai viet da duoc an khoi bang tin cua ban.");
+    Alert.alert("Đã ẩn", "Bài viết đã được ẩn khỏi bảng tin của bạn.");
   };
 
   const handleReportPost = async (post: FeedPost) => {
@@ -302,23 +302,23 @@ export function FeedScreen({
       await api.submitReport({
         targetType: "post",
         targetId: post.id,
-        reason: "Noi dung khong phu hop tren bang tin",
-        details: `Bai viet tu ${post.authorName}`,
+        reason: "Nội dung không phù hợp trên bảng tin",
+        details: `Bài viết từ ${post.authorName}`,
       });
-      Alert.alert("Da bao cao", "Cam on ban da gui phan hoi.");
+      Alert.alert("Đã báo cáo", "Cảm ơn bạn đã gửi phản hồi.");
     } catch (err) {
       Alert.alert(
-        "Bao cao that bai",
-        err instanceof Error ? err.message : "Khong the gui bao cao",
+        "Báo cáo thất bại",
+        err instanceof Error ? err.message : "Không thể gửi báo cáo",
       );
     }
   };
 
   const handleDelete = async (post: FeedPost) => {
-    Alert.alert("Xoa bai viet", "Ban co chac muon xoa?", [
-      { text: "Huy", style: "cancel" },
+    Alert.alert("Xóa bài viết", "Bạn có chắc muốn xóa?", [
+      { text: "Hủy", style: "cancel" },
       {
-        text: "Xoa",
+        text: "Xóa",
         style: "destructive",
         onPress: async () => {
           try {
@@ -326,8 +326,8 @@ export function FeedScreen({
             setPosts((prev) => prev.filter((p) => p.id !== post.id));
           } catch (err) {
             Alert.alert(
-              "Xoa that bai",
-              err instanceof Error ? err.message : "Khong the xoa bai viet",
+              "Xóa thất bại",
+              err instanceof Error ? err.message : "Không thể xóa bài viết",
             );
           }
         },
@@ -338,9 +338,9 @@ export function FeedScreen({
   const handleOpenPostMenu = (post: FeedPost) => {
     const isOwner = post.authorId === user.id;
     if (isOwner) {
-      Alert.alert("Tuy chon bai viet", "Chon thao tac", [
+      Alert.alert("Tùy chọn bài viết", "Chọn thao tác", [
         {
-          text: "Chinh sua",
+          text: "Chỉnh sửa",
           onPress: () => {
             setEditingPost(post);
             setComposerMode("edit");
@@ -348,25 +348,25 @@ export function FeedScreen({
           },
         },
         {
-          text: "Xoa",
+          text: "Xóa",
           style: "destructive",
           onPress: () => handleDelete(post),
         },
-        { text: "Huy", style: "cancel" },
+        { text: "Hủy", style: "cancel" },
       ]);
       return;
     }
 
-    Alert.alert("Tuy chon bai viet", "Chon thao tac", [
-      { text: "An bai viet", onPress: () => handleHidePost(post) },
+    Alert.alert("Tùy chọn bài viết", "Chọn thao tác", [
+      { text: "Ẩn bài viết", onPress: () => handleHidePost(post) },
       {
-        text: "Bao cao bai viet",
+        text: "Báo cáo bài viết",
         style: "destructive",
         onPress: () => {
           void handleReportPost(post);
         },
       },
-      { text: "Huy", style: "cancel" },
+      { text: "Hủy", style: "cancel" },
     ]);
   };
 
@@ -390,8 +390,8 @@ export function FeedScreen({
       setComposerMode("create");
     } catch (err) {
       Alert.alert(
-        composerMode === "edit" ? "Luu that bai" : "Dang that bai",
-        err instanceof Error ? err.message : "Khong the luu bai viet",
+        composerMode === "edit" ? "Lưu thất bại" : "Đăng thất bại",
+        err instanceof Error ? err.message : "Không thể lưu bài viết",
       );
       throw err;
     }
@@ -466,7 +466,7 @@ export function FeedScreen({
           visiblePosts.length > 0 ? (
             <View className="items-center py-3">
               <Text className="text-[11px] text-muted-foreground">
-                Keo xuong de lam moi bang tin
+                Kéo xuống để làm mới bảng tin
               </Text>
             </View>
           ) : null
@@ -490,7 +490,7 @@ export function FeedScreen({
                   />
                   <View className="flex-1 ml-4">
                     <Text className="text-muted-foreground text-sm bg-surface-secondary rounded-full px-4 py-2.5">
-                      Ban dang nghi gi?
+                      Bạn đang nghĩ gì?
                     </Text>
                   </View>
                 </View>
@@ -508,8 +508,8 @@ export function FeedScreen({
           !isLoading ? (
             <EmptyState
               icon="📝"
-              title="Chua co bai viet nao"
-              subtitle="Hay la nguoi dau tien dang bai!"
+              title="Chưa có bài viết nào"
+              subtitle="Hãy là người đầu tiên đăng bài!"
             />
           ) : null
         }
@@ -545,7 +545,7 @@ export function FeedScreen({
         <View className="flex-1 bg-black/40 justify-end">
           <View className="bg-surface rounded-t-3xl p-4 pb-6 max-h-[85%]">
             <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-base font-bold text-foreground">Chia se bai viet</Text>
+              <Text className="text-base font-bold text-foreground">Chia sẻ bài viết</Text>
               <TouchableOpacity onPress={closeShareModal}>
                 <Feather name="x" size={20} color="#6b7280" />
               </TouchableOpacity>
@@ -555,7 +555,7 @@ export function FeedScreen({
               className="h-11 rounded-xl border border-border bg-surface-secondary px-4 text-sm text-foreground"
               value={shareNote}
               onChangeText={setShareNote}
-              placeholder="Them loi nhan (tuy chon)"
+              placeholder="Thêm lời nhắn (tùy chọn)"
               placeholderTextColor="#7e8592"
             />
 
@@ -567,12 +567,12 @@ export function FeedScreen({
               }}
             >
               <Text className="text-white font-semibold text-sm">
-                Chia se len trang ca nhan
+                Chia sẻ lên trang cá nhân
               </Text>
             </TouchableOpacity>
 
             <Text className="text-sm text-foreground font-semibold mt-4 mb-2">
-              Chia se cho ban be
+              Chia sẻ cho bạn bè
             </Text>
 
             {isLoadingShareFriends ? (
@@ -600,8 +600,8 @@ export function FeedScreen({
                 ListEmptyComponent={
                   <EmptyState
                     icon="👥"
-                    title="Chua co ban be de chia se"
-                    subtitle="Ket ban truoc khi gui bai viet qua tin nhan."
+                    title="Chưa có bạn bè để chia sẻ"
+                    subtitle="Kết bạn trước khi gửi bài viết qua tin nhắn."
                   />
                 }
                 style={{ maxHeight: 220 }}

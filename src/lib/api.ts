@@ -137,9 +137,9 @@ function performHttpRequest(
 function normalizeNetworkError(error: Error): string {
   if (error.message === "NETWORK_TIMEOUT") {
     const connectionHint = API_URL.includes("10.0.2.2")
-      ? " Neu ban dung Expo Go tren dien thoai that, doi EXPO_PUBLIC_API_URL sang IP LAN cua may tinh (vi du http://192.168.x.x:5000)."
+      ? " Nếu bạn dùng Expo Go trên điện thoại thật, đổi EXPO_PUBLIC_API_URL sang IP LAN của máy tính (ví dụ http://192.168.x.x:5000)."
       : "";
-    return `Khong nhan duoc phan hoi tu server sau ${Math.round(REQUEST_TIMEOUT_MS / 1000)} giay. Kiem tra API URL: ${API_URL}.${connectionHint}`;
+    return `Không nhận được phản hồi từ server sau ${Math.round(REQUEST_TIMEOUT_MS / 1000)} giây. Kiểm tra API URL: ${API_URL}.${connectionHint}`;
   }
 
   if (
@@ -147,7 +147,7 @@ function normalizeNetworkError(error: Error): string {
     error.message === "NETWORK_ABORTED" ||
     error.message.startsWith("NETWORK_STATUS_INVALID")
   ) {
-    return `Khong the ket noi den server (${API_URL}). Kiem tra backend dang chay va EXPO_PUBLIC_API_URL phu hop thiet bi.`;
+    return `Không thể kết nối đến server (${API_URL}). Kiểm tra backend đang chạy và EXPO_PUBLIC_API_URL phù hợp thiết bị.`;
   }
 
   return error.message;
@@ -186,7 +186,7 @@ async function requestWithXhr<T>(
       throw new Error(normalizeNetworkError(error));
     }
     throw new Error(
-      `Khong the ket noi den server (${API_URL}). Kiem tra backend dang chay va EXPO_PUBLIC_API_URL phu hop thiet bi.`,
+      `Không thể kết nối đến server (${API_URL}). Kiểm tra backend đang chạy và EXPO_PUBLIC_API_URL phù hợp thiết bị.`,
     );
   }
 
@@ -392,7 +392,7 @@ function mapConversation(raw: any): Conversation {
   const members = (raw?.members || []).map((member: any) => ({
     userId: Number(member?.userId || 0),
     fullName: String(
-      member?.fullName || member?.displayName || member?.name || "Nguoi dung",
+      member?.fullName || member?.displayName || member?.name || "Người dùng",
     ),
     avatarUrl: resolveAssetUrl(member?.avatarUrl) || null,
     role: member?.role ? String(member.role) : undefined,
@@ -618,7 +618,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(payload),
     }).then((res) => ({
-      message: String((res as any)?.message || "Cap nhat ho so thanh cong"),
+      message: String((res as any)?.message || "Cập nhật hồ sơ thành công"),
       user: mapAuthUser((res as any)?.user ?? res),
     })),
 
@@ -680,7 +680,7 @@ export const api = {
         body: JSON.stringify(payload),
       },
     ).then((res) => ({
-      message: String((res as any)?.message || "Cap nhat bai viet thanh cong"),
+      message: String((res as any)?.message || "Cập nhật bài viết thành công"),
       post: mapFeedPost((res as any)?.post ?? res),
     })),
 
@@ -824,7 +824,7 @@ export const api = {
         body: JSON.stringify({ avatarUrl }),
       },
     ).then((res) => ({
-      message: String((res as any)?.message || "Da cap nhat avatar nhom"),
+      message: String((res as any)?.message || "Đã cập nhật avatar nhóm"),
       conversation: mapConversation((res as any)?.conversation || {}),
     })),
 
@@ -1276,7 +1276,7 @@ export const api = {
         body: JSON.stringify({ name }),
       },
     ).then((res) => ({
-      message: String((res as any)?.message || "Da doi ten nhom"),
+      message: String((res as any)?.message || "Đã đổi tên nhóm"),
       conversation: mapConversation((res as any)?.conversation || {}),
     })),
 

@@ -19,7 +19,7 @@ export function MessageInput({
   onSend,
   onPickImage,
   onPickFile,
-  placeholder = "Nhan tin...",
+  placeholder = "Nhắn tin...",
   disabled = false,
   disableAttachments = false,
 }: MessageInputProps) {
@@ -56,7 +56,7 @@ export function MessageInput({
         disabled={disabled}
         activeOpacity={0.7}
       >
-        <Text className="text-white font-bold text-sm">Gui</Text>
+        <Text className="text-white font-bold text-sm">Gửi</Text>
       </TouchableOpacity>
     </View>
   );

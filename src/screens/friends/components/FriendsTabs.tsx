@@ -26,19 +26,19 @@ export function FriendsTabs({
       }}
     >
       <TabButton
-        label="Ban be"
+        label="Bạn bè"
         count={friendCount}
         active={activeTab === "friends"}
         onPress={() => onChangeTab("friends")}
       />
       <TabButton
-        label="Loi moi"
+        label="Lời mời"
         count={pendingCount}
         active={activeTab === "pending"}
         onPress={() => onChangeTab("pending")}
       />
       <TabButton
-        label="Tim ban"
+        label="Tìm bạn"
         active={activeTab === "search"}
         onPress={() => onChangeTab("search")}
       />
