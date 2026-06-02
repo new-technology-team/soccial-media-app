@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   RefreshControl,
   Text,
   TextInput,
@@ -436,6 +437,12 @@ export function FeedScreen({
       <FlatList
         data={visiblePosts}
         keyExtractor={(item) => String(item.id)}
+        removeClippedSubviews={Platform.OS === "android"}
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        updateCellsBatchingPeriod={40}
+        keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => (
           <PostCard
             post={item}

@@ -189,6 +189,67 @@ function resolveDirectPeerUserId(
   return null;
 }
 
+function normalizeMessageId(value: unknown): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized === "undefined" || normalized === "null") {
+    return "";
+  }
+  return normalized;
+}
+
+function buildFallbackMessageKey(message: Partial<Message>, index = 0): string {
+  return [
+    "tmp",
+    String(message.conversationId || "").trim(),
+    Number(message.senderId || 0),
+    String(message.createdAt || ""),
+    String(message.type || "text"),
+    String(message.content || ""),
+    String(message.mediaUrl || ""),
+    String(message.fileName || ""),
+    index,
+  ].join(":");
+}
+
+function dedupeMessages(list: Message[]): Message[] {
+  const seen = new Set<string>();
+  const next: Message[] = [];
+
+  for (let index = 0; index < list.length; index += 1) {
+    const item = list[index];
+    const normalizedId = normalizeMessageId(item?.id);
+    const key = normalizedId
+      ? `id:${normalizedId}`
+      : buildFallbackMessageKey(item, index);
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(normalizedId ? { ...item, id: normalizedId } : item);
+  }
+
+  return next;
+}
+
+function upsertMessage(list: Message[], incoming: Message): Message[] {
+  const normalizedId = normalizeMessageId(incoming?.id);
+  if (!normalizedId) {
+    return dedupeMessages([...list, incoming]);
+  }
+
+  const nextIncoming: Message = { ...incoming, id: normalizedId };
+  const existingIndex = list.findIndex(
+    (item) => normalizeMessageId(item?.id) === normalizedId,
+  );
+
+  if (existingIndex === -1) {
+    return [...list, nextIncoming];
+  }
+
+  const next = [...list];
+  next[existingIndex] = { ...next[existingIndex], ...nextIncoming };
+  return next;
+}
+
 export function MessagesScreen({
   user,
   mode = "all",
@@ -308,7 +369,7 @@ export function MessagesScreen({
   const loadMessages = useCallback(async (convId: string) => {
     try {
       const res = await api.listMessages(convId);
-      setMessages(res.messages || []);
+      setMessages(dedupeMessages(res.messages || []));
       scrollMessagesToEnd(false);
     } catch {
       /* silent */
@@ -527,10 +588,7 @@ export function MessagesScreen({
       );
 
       if (isInActiveJoinedRoom) {
-        setMessages((prev) => {
-          if (prev.some((item) => item.id === normalized.id)) return prev;
-          return [...prev, normalized];
-        });
+        setMessages((prev) => upsertMessage(prev, normalized));
         scrollMessagesToEnd();
       }
 
@@ -939,11 +997,10 @@ export function MessagesScreen({
         text,
       });
       setMessages((prev) => {
-        const withoutOptimistic = prev.filter((item) => item.id !== optimisticId);
-        if (withoutOptimistic.some((item) => item.id === res.message.id)) {
-          return withoutOptimistic;
-        }
-        return [...withoutOptimistic, res.message];
+        const withoutOptimistic = prev.filter(
+          (item) => normalizeMessageId(item.id) !== normalizeMessageId(optimisticId),
+        );
+        return upsertMessage(withoutOptimistic, res.message);
       });
       scrollMessagesToEnd();
     } catch (err) {
@@ -1036,7 +1093,7 @@ export function MessagesScreen({
           height: Number(asset.height || 0),
         },
       });
-      setMessages((prev) => [...prev, res.message]);
+      setMessages((prev) => upsertMessage(prev, res.message));
       setMessageText("");
       scrollMessagesToEnd();
     } catch (err) {
@@ -1094,7 +1151,7 @@ export function MessagesScreen({
         fileName: uploaded.fileName || asset.name || "tep-dinh-kem",
         fileSize: uploaded.size || approxBytes,
       });
-      setMessages((prev) => [...prev, res.message]);
+      setMessages((prev) => upsertMessage(prev, res.message));
       setMessageText("");
       scrollMessagesToEnd();
     } catch (err) {
@@ -1883,7 +1940,9 @@ export function MessagesScreen({
           <FlatList
             ref={messageListRef}
             data={messages}
-            keyExtractor={(item) => String(item.id)}
+            keyExtractor={(item, index) =>
+              normalizeMessageId(item.id) || buildFallbackMessageKey(item, index)
+            }
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="interactive"
             renderItem={({ item }) => (

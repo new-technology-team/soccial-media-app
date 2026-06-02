@@ -336,10 +336,23 @@ function mapAuthUser(raw: any): AuthUser {
 
 function mapFeedPost(raw: any): FeedPost {
   const owner = raw?.owner || {};
+  const mediaUrl = resolveAssetUrl(raw?.mediaUrl);
+  const rawMediaType = String(
+    raw?.mediaType || raw?.contentType || raw?.mimeType || "",
+  ).toLowerCase();
+  const normalizedMediaType =
+    rawMediaType.includes("video") ||
+    /\.((mp4|mov|m4v|webm|mkv|3gp|m3u8))(\?.*)?$/i.test(String(mediaUrl || ""))
+      ? "video"
+      : mediaUrl
+        ? "image"
+        : undefined;
+
   return {
     id: toStringId(raw?.id ?? raw?._id),
     content: String(raw?.content || ""),
-    mediaUrl: resolveAssetUrl(raw?.mediaUrl),
+    mediaUrl,
+    mediaType: normalizedMediaType,
     visibility: raw?.visibility === "private" ? "private" : "public",
     authorId: Number(raw?.authorId || owner?.userId || 0),
     authorName: String(raw?.authorName || owner?.displayName || "Người dùng"),

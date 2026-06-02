@@ -2,6 +2,7 @@ export type FeedPost = {
   id: string;
   content: string;
   mediaUrl?: string;
+  mediaType?: "image" | "video" | string;
   visibility: "public" | "private";
   authorId: number;
   authorName: string;

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, Text, TouchableOpacity, Image, Linking, ActivityIndicator, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { Avatar } from "../common/Avatar";
 import type { FeedPost } from "../../types";
@@ -27,6 +27,18 @@ interface PostCardProps {
   onHashtagPress?: (tag: string) => void;
 }
 
+const VIDEO_FILE_REGEX = /\.(mp4|mov|m4v|webm|mkv|3gp|m3u8)(\?.*)?$/i;
+
+function resolvePostMediaType(post: FeedPost): "image" | "video" | null {
+  const rawType = String(post.mediaType || "").toLowerCase();
+  if (rawType === "video") return "video";
+  if (rawType === "image") return "image";
+
+  const mediaUrl = String(post.mediaUrl || "").trim();
+  if (!mediaUrl) return null;
+  return VIDEO_FILE_REGEX.test(mediaUrl) ? "video" : "image";
+}
+
 function renderContent(content: string, onHashtagPress?: (tag: string) => void) {
   const parts = content.split(/(#\w+)/g);
   return (
@@ -48,7 +60,7 @@ function renderContent(content: string, onHashtagPress?: (tag: string) => void) 
   );
 }
 
-export function PostCard({
+function PostCardComponent({
   post,
   currentUserId,
   isSaved = false,
@@ -62,6 +74,16 @@ export function PostCard({
 }: PostCardProps) {
   void currentUserId;
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isOpeningVideo, setIsOpeningVideo] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const mediaType = useMemo(
+    () => resolvePostMediaType(post),
+    [post.mediaType, post.mediaUrl],
+  );
+
+  useEffect(() => {
+    setImageLoadFailed(false);
+  }, [post.mediaUrl, post.id]);
 
   const handleHeartTap = () => {
     if (showEmojiPicker) {
@@ -78,6 +100,25 @@ export function PostCard({
   const handlePickEmoji = (type: string) => {
     setShowEmojiPicker(false);
     onReact?.(type);
+  };
+
+  const handleOpenVideo = async () => {
+    const mediaUrl = String(post.mediaUrl || "").trim();
+    if (!mediaUrl || isOpeningVideo) return;
+
+    try {
+      setIsOpeningVideo(true);
+      const supported = await Linking.canOpenURL(mediaUrl);
+      if (!supported) {
+        Alert.alert("Khong mo duoc video", "Lien ket video khong hop le.");
+        return;
+      }
+      await Linking.openURL(mediaUrl);
+    } catch {
+      Alert.alert("Khong mo duoc video", "Vui long thu lai sau.");
+    } finally {
+      setIsOpeningVideo(false);
+    }
   };
 
 
@@ -101,13 +142,59 @@ export function PostCard({
       {renderContent(post.content, onHashtagPress)}
 
       {/* Media */}
-      {post.mediaUrl ? (
+      {post.mediaUrl && mediaType === "image" && !imageLoadFailed ? (
         <Image
           source={{ uri: post.mediaUrl }}
           className="w-full rounded-xl mb-4"
-          style={{ height: 200 }}
+          style={{ height: 220 }}
           resizeMode="cover"
+          onError={() => setImageLoadFailed(true)}
         />
+      ) : null}
+
+      {post.mediaUrl && mediaType === "video" ? (
+        <TouchableOpacity
+          className="w-full rounded-xl mb-4 border border-border bg-surface-secondary p-4"
+          style={{ minHeight: 176 }}
+          activeOpacity={0.8}
+          onPress={() => {
+            void handleOpenVideo();
+          }}
+        >
+          <View className="flex-1 items-center justify-center">
+            <View className="w-12 h-12 rounded-full bg-primary/10 items-center justify-center mb-2">
+              {isOpeningVideo ? (
+                <ActivityIndicator size="small" color="#0052ce" />
+              ) : (
+                <Feather name="play" size={20} color="#0052ce" />
+              )}
+            </View>
+            <Text className="text-sm font-semibold text-foreground">Video</Text>
+            <Text className="text-xs text-muted-foreground mt-1">
+              Nhan de xem video
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
+      {post.mediaUrl && mediaType === "image" && imageLoadFailed ? (
+        <TouchableOpacity
+          className="w-full rounded-xl mb-4 border border-border bg-surface-secondary p-4"
+          style={{ minHeight: 120 }}
+          activeOpacity={0.8}
+          onPress={() => {
+            const mediaUrl = String(post.mediaUrl || "").trim();
+            if (!mediaUrl) return;
+            void Linking.openURL(mediaUrl).catch(() => undefined);
+          }}
+        >
+          <View className="flex-1 items-center justify-center">
+            <Feather name="image" size={20} color="#6b7280" />
+            <Text className="text-xs text-muted-foreground mt-2">
+              Khong tai duoc anh, nhan de mo lien ket
+            </Text>
+          </View>
+        </TouchableOpacity>
       ) : null}
 
       {/* Stats */}
@@ -175,3 +262,24 @@ export function PostCard({
     </View>
   );
 }
+
+function arePostCardPropsEqual(prev: PostCardProps, next: PostCardProps) {
+  return (
+    prev.isSaved === next.isSaved &&
+    prev.currentUserId === next.currentUserId &&
+    prev.post.id === next.post.id &&
+    prev.post.content === next.post.content &&
+    prev.post.mediaUrl === next.post.mediaUrl &&
+    prev.post.mediaType === next.post.mediaType &&
+    prev.post.visibility === next.post.visibility &&
+    prev.post.authorId === next.post.authorId &&
+    prev.post.authorName === next.post.authorName &&
+    prev.post.authorAvatar === next.post.authorAvatar &&
+    prev.post.createdAt === next.post.createdAt &&
+    prev.post.reactionCount === next.post.reactionCount &&
+    prev.post.commentCount === next.post.commentCount &&
+    prev.post.viewerReaction === next.post.viewerReaction
+  );
+}
+
+export const PostCard = React.memo(PostCardComponent, arePostCardPropsEqual);

@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -46,6 +47,8 @@ const reactionToEmoji: Record<string, string> = {
   angry: "😡",
 };
 
+const VIDEO_FILE_REGEX = /\.(mp4|mov|m4v|webm|mkv|3gp|m3u8)(\?.*)?$/i;
+
 export function PostCommentsScreen({
   postId,
   post,
@@ -54,6 +57,7 @@ export function PostCommentsScreen({
   onCommentAdded,
 }: PostCommentsScreenProps) {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = 76 + Math.max(insets.bottom, 4);
   const inputBottomOffset = Math.max(insets.bottom, 4);
   const [comments, setComments] = useState<FeedComment[]>([]);
   const [postPreview, setPostPreview] = useState<FeedPost | null>(post || null);
@@ -276,6 +280,11 @@ export function PostCommentsScreen({
     );
   };
 
+  const previewMediaUrl = String(postPreview?.mediaUrl || "").trim();
+  const previewIsVideo =
+    String(postPreview?.mediaType || "").toLowerCase() === "video" ||
+    VIDEO_FILE_REGEX.test(previewMediaUrl);
+
   return (
     <View className="flex-1 bg-background">
       <TopBar
@@ -287,13 +296,14 @@ export function PostCommentsScreen({
         className="flex-1"
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+        style={{ marginBottom: tabBarHeight }}
       >
         <FlatList
           data={rootComments}
           keyExtractor={(item) => String(item.id)}
           className="flex-1"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -326,13 +336,33 @@ export function PostCommentsScreen({
                   <Text className="text-foreground text-sm mt-2 leading-5">
                     {postPreview.content || "Bài viết có ảnh/video"}
                   </Text>
-                  {postPreview.mediaUrl ? (
+                  {previewMediaUrl ? (
                     <View className="rounded-xl overflow-hidden mt-3 border border-border">
-                      <Image
-                        source={{ uri: postPreview.mediaUrl }}
-                        style={{ width: "100%", height: 160 }}
-                        resizeMode="cover"
-                      />
+                      {previewIsVideo ? (
+                        <TouchableOpacity
+                          className="h-40 items-center justify-center bg-surface-secondary"
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            void Linking.openURL(previewMediaUrl).catch(() => undefined);
+                          }}
+                        >
+                          <View className="w-11 h-11 rounded-full bg-primary/10 items-center justify-center mb-2">
+                            <Feather name="play" size={18} color="#0052ce" />
+                          </View>
+                          <Text className="text-xs font-semibold text-foreground">
+                            Video
+                          </Text>
+                          <Text className="text-[11px] text-muted-foreground mt-1">
+                            Nhan de mo video
+                          </Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Image
+                          source={{ uri: previewMediaUrl }}
+                          style={{ width: "100%", height: 160 }}
+                          resizeMode="cover"
+                        />
+                      )}
                     </View>
                   ) : null}
                 </View>
