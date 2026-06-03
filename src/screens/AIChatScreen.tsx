@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Animated,
   Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TopBar } from "../components/common/TopBar";
 import { api } from "../lib/api";
 
@@ -79,6 +79,7 @@ function TypingDots() {
 }
 
 export function AIChatScreen({ onExit }: AIChatScreenProps) {
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MSG]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -255,7 +256,7 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-background"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior="padding"
       keyboardVerticalOffset={0}
     >
       <TopBar
@@ -322,6 +323,7 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
           renderItem={renderItem}
           contentContainerStyle={{ paddingTop: 12, paddingBottom: 16 }}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
         />
       )}
@@ -329,7 +331,7 @@ export function AIChatScreen({ onExit }: AIChatScreenProps) {
       {/* Input box */}
       <View
         className="flex-row items-end px-3 pt-2.5 bg-surface border-t border-border gap-2"
-        style={{ paddingBottom: Platform.OS === "android" ? 80 : 90 }}
+        style={{ paddingBottom: Math.max(insets.bottom, 12) }}
       >
         <TextInput
           className="flex-1 bg-surface-secondary rounded-[22px] px-4 py-2.5 text-sm text-foreground"

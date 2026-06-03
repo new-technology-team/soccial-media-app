@@ -357,10 +357,11 @@ function mapFeedPost(raw: any): FeedPost {
 }
 
 function mapFeedComment(raw: any): FeedComment {
+  const parentRaw = raw?.parentCommentId ?? raw?.parentId;
   return {
     id: toStringId(raw?.id ?? raw?._id),
     postId: raw?.postId ? toStringId(raw.postId) : undefined,
-    parentId: raw?.parentId ? toStringId(raw.parentId) : null,
+    parentId: parentRaw ? toStringId(parentRaw) : null,
     content: String(raw?.content || ""),
     userId: Number(raw?.userId || 0),
     authorName: String(raw?.authorName || "Người dùng"),
@@ -748,10 +749,24 @@ export const api = {
   listComments: (postId: string | number) =>
     request<{ comments: any[]; total?: number }>(
       `/api/social/posts/${encodeURIComponent(String(postId))}/comments`,
-    ).then((res) => ({
-      comments: (res.comments || []).map(mapFeedComment),
-      total: Number(res.total || (res.comments || []).length || 0),
-    })),
+    ).then((res) => {
+      // Backend trả về cây lồng nhau: bình luận gốc kèm `replies[]`. Làm phẳng
+      // để giữ đủ cả phần trả lời (mỗi item có `parentCommentId` để gom nhánh).
+      const flattened: any[] = [];
+      const walk = (list: any[]) => {
+        for (const raw of list || []) {
+          flattened.push(raw);
+          if (Array.isArray(raw?.replies) && raw.replies.length > 0) {
+            walk(raw.replies);
+          }
+        }
+      };
+      walk(res.comments || []);
+      return {
+        comments: flattened.map(mapFeedComment),
+        total: Number(res.total || flattened.length || 0),
+      };
+    }),
 
   reactComment: (commentId: string | number, type: string = "like") =>
     request<{ comment: any }>(

@@ -43,10 +43,11 @@ export default function App() {
   } | null>(null);
   const [incomingCallBootstrap, setIncomingCallBootstrap] = useState<{
     conversationId: string;
-    roomId: string;
     fromUserId: number;
     fromUserName?: string;
-    targetUserId?: number;
+    callType?: "voice" | "video";
+    mode?: "private" | "group";
+    offer?: { type: string; sdp: string };
     routeKey: number;
   } | null>(null);
   const [aiReturnTab, setAiReturnTab] = useState("feed");
@@ -78,19 +79,21 @@ export default function App() {
 
     const onCallOffer = (payload: any) => {
       const conversationId = String(payload?.conversationId || "").trim();
-      const roomId = String(payload?.roomId || "").trim();
       const fromUserId = Number(payload?.fromUserId || 0);
-      if (!conversationId || !roomId || !fromUserId) return;
+      const sdp = String(payload?.offer?.sdp || "").trim();
+      // WebRTC: chỉ xử lý offer mới có SDP (bỏ qua renegotiate của cuộc gọi đang diễn ra).
+      if (!conversationId || !fromUserId || !sdp || payload?.renegotiate) return;
       if (fromUserId === Number(user.id)) return;
       // Khi đang ở tab Tin nhắn, MessagesScreen tự xử lý call:offer → tránh hiển thị modal nhân đôi.
       if (activeTabRef.current === "messages") return;
 
       setIncomingCallBootstrap({
         conversationId,
-        roomId,
         fromUserId,
         fromUserName: String(payload?.fromUserName || "Nguoi dung"),
-        targetUserId: Number(payload?.targetUserId || 0) || undefined,
+        callType: payload?.callType === "voice" ? "voice" : "video",
+        mode: payload?.mode === "group" ? "group" : "private",
+        offer: { type: String(payload?.offer?.type || "offer"), sdp },
         routeKey: Date.now(),
       });
       setActiveTab("messages");

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, Image } from "react-native";
+import { View, Text, TouchableOpacity, Image, Pressable } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { Avatar } from "../common/Avatar";
@@ -154,23 +154,40 @@ export function PostCard({
         <Text className="text-muted-foreground text-xs ml-1">{post.commentCount} bình luận</Text>
       </View>
 
-      {/* Emoji Picker (inline, shows on long press) */}
+      {/* Emoji Picker (popover nổi, mở khi nhấn giữ nút Thích) */}
       {showEmojiPicker && (
-        <View className="flex-row justify-around bg-surface-secondary rounded-2xl border border-border px-2 py-2 mb-3">
-          {REACTIONS.map(({ type, emoji }) => {
-            const isActive = post.viewerReaction === type;
-            return (
-              <TouchableOpacity
-                key={type}
-                className={`w-10 h-10 items-center justify-center rounded-full ${isActive ? "bg-blue-50 border border-primary" : ""}`}
-                onPress={() => handlePickEmoji(type)}
-                activeOpacity={0.75}
-              >
-                <Text style={{ fontSize: 22 }}>{emoji}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <>
+          <Pressable
+            onPress={() => setShowEmojiPicker(false)}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10 }}
+          />
+          <View
+            className="absolute left-4 right-4 flex-row justify-around bg-surface rounded-2xl border border-border px-2 py-2"
+            style={{
+              bottom: 52,
+              zIndex: 20,
+              elevation: 6,
+              shadowColor: "#000",
+              shadowOpacity: 0.12,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 2 },
+            }}
+          >
+            {REACTIONS.map(({ type, emoji }) => {
+              const isActive = post.viewerReaction === type;
+              return (
+                <TouchableOpacity
+                  key={type}
+                  className={`w-10 h-10 items-center justify-center rounded-full ${isActive ? "bg-blue-50 border border-primary" : ""}`}
+                  onPress={() => handlePickEmoji(type)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={{ fontSize: 22 }}>{emoji}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
       )}
 
       {/* Action Buttons */}

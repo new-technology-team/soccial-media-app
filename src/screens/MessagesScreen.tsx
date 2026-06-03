@@ -2,11 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
-  AppState,
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   RefreshControl,
@@ -31,12 +29,13 @@ import { SearchBar } from "../components/search/SearchBar";
 import { api, authStore, getSocket } from "../lib";
 import type { AuthUser, Conversation, Message } from "../types";
 import { MediaGalleryModal } from "../components/chat/MediaGalleryModal";
+import { CallScreen } from "../components/call/CallScreen";
+import { useWebRTCCall } from "../hooks/useWebRTCCall";
 import { ComposeConversationModal } from "./messages/components";
 import { useConversationCompose } from "./messages/hooks";
 import type { MessagesScreenProps } from "./messages/types";
 
 const DEFAULT_API_URL = "http://10.0.2.2:5000";
-const DEFAULT_VIDEO_CALL_BASE_URL = "https://meet.jit.si";
 
 // Bộ sticker emoji — trùng token với web (STICKER_EMOJI_TOKENS) để liên thông.
 const STICKER_TOKENS: string[] = [
@@ -62,29 +61,6 @@ export function resolveStickerGlyph(token: string): string {
   if (STICKER_ICON_FALLBACK[raw]) return STICKER_ICON_FALLBACK[raw];
   return raw || "🙂";
 }
-
-type CallPayload = {
-  conversationId: string;
-  roomId: string;
-  fromUserId: number;
-  fromUserName: string;
-  targetUserId?: number;
-  mode?: "video";
-  answeredAt?: number;
-  reason?: string;
-  // Liên thông với web: báo bên gọi (web đang WebRTC) chuyển sang mở Jitsi.
-  useJitsi?: boolean;
-};
-
-type IncomingCallState = {
-  payload: CallPayload;
-  conversationName: string;
-};
-
-type OutgoingCallState = {
-  payload: CallPayload;
-  conversationName: string;
-};
 
 function resolveChatMediaUrl(value: unknown): string {
   const raw = String(value || "").trim();
@@ -136,67 +112,6 @@ async function ensureBase64Data(
   if (!response.ok) return "";
   const arr = await response.arrayBuffer();
   return Buffer.from(arr).toString("base64");
-}
-
-function sanitizeRoomName(input: string): string {
-  const value = String(input || "")
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return value || `zchat-${Date.now()}`;
-}
-
-// Fallback (cố định theo hội thoại) khi server không cấp phát phòng — vẫn hội tụ về cùng 1 phòng.
-function buildCallRoomId(conversationId: string): string {
-  return sanitizeRoomName(`zchat-${conversationId}`);
-}
-
-// Lấy phòng Jitsi của phiên gọi từ server (tái dùng nếu cuộc gọi đang diễn ra). Có timeout fallback.
-function acquireCallRoom(
-  socket: { emit: (ev: string, data: unknown, ack?: (resp: unknown) => void) => void } | null | undefined,
-  conversationId: string,
-): Promise<string> {
-  return new Promise((resolve) => {
-    const fallback = buildCallRoomId(conversationId);
-    if (!socket) {
-      resolve(fallback);
-      return;
-    }
-    let done = false;
-    const finish = (roomId?: string) => {
-      if (done) return;
-      done = true;
-      resolve(roomId || fallback);
-    };
-    const timer = setTimeout(() => finish(), 4000);
-    try {
-      socket.emit("call:room:acquire", { conversationId }, (resp: unknown) => {
-        clearTimeout(timer);
-        finish(String((resp as { roomId?: string })?.roomId || ""));
-      });
-    } catch {
-      clearTimeout(timer);
-      finish();
-    }
-  });
-}
-
-function resolveVideoCallUrl(roomId: string, displayName?: string): string {
-  const base = String(
-    process.env.EXPO_PUBLIC_VIDEO_CALL_BASE_URL || DEFAULT_VIDEO_CALL_BASE_URL,
-  ).replace(/\/+$/, "");
-  // Bỏ màn hình prejoin để vào thẳng phòng, hiển thị tên người dùng.
-  const hash = [
-    "config.prejoinConfig.enabled=false",
-    "config.prejoinPageEnabled=false",
-    displayName
-      ? `userInfo.displayName=${encodeURIComponent(`"${displayName}"`)}`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("&");
-  return `${base}/${encodeURIComponent(roomId)}${hash ? `#${hash}` : ""}`;
 }
 
 function resolveConvDisplayName(
@@ -274,9 +189,6 @@ export function MessagesScreen({
     useState(false);
   const [isMutatingConversation, setIsMutatingConversation] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
-  const [outgoingCall, setOutgoingCall] = useState<OutgoingCallState | null>(null);
-  const [isOpeningCallRoom, setIsOpeningCallRoom] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [peerIsTyping, setPeerIsTyping] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -311,16 +223,6 @@ export function MessagesScreen({
   const createdConversationIdsRef = useRef<Set<string>>(new Set());
   const conversationsRef = useRef<Conversation[]>([]);
   const handledMessageEventRef = useRef<Set<string>>(new Set());
-  const handledIncomingBootstrapRef = useRef<number>(0);
-  const pendingJitsiCleanupRef = useRef<boolean>(false);
-  const callLogRef = useRef<{
-    conversationId: string;
-    roomId: string;
-    startedAt: number;
-    answeredAt: number | null;
-    targetUserId?: number;
-    logged: boolean;
-  } | null>(null);
 
   const filteredConversations = useMemo(() => {
     const q = conversationKeyword.trim().toLowerCase();
@@ -417,42 +319,6 @@ export function MessagesScreen({
     [loadMessages, scrollMessagesToEnd],
   );
 
-  useEffect(() => {
-    const payload = incomingCallBootstrap;
-    if (!payload?.conversationId || !payload?.roomId) return;
-
-    const routeKey = Number(payload.routeKey || 0);
-    if (routeKey && handledIncomingBootstrapRef.current === routeKey) return;
-    if (routeKey) handledIncomingBootstrapRef.current = routeKey;
-
-    const normalizedPayload: CallPayload = {
-      conversationId: String(payload.conversationId),
-      roomId: String(payload.roomId),
-      fromUserId: Number(payload.fromUserId || 0),
-      fromUserName: String(payload.fromUserName || "Người dùng"),
-      targetUserId: Number(payload.targetUserId || 0) || undefined,
-      mode: "video",
-    };
-
-    const matchedConversation = conversationsRef.current.find(
-      (item) => String(item.id) === normalizedPayload.conversationId,
-    );
-    const conversationName = String(
-      matchedConversation?.name ||
-      normalizedPayload.fromUserName ||
-      "Cuoc goi video",
-    );
-
-    setIncomingCall({ payload: normalizedPayload, conversationName });
-    if (
-      matchedConversation &&
-      activeConversationIdRef.current !== normalizedPayload.conversationId
-    ) {
-      void openConversation(matchedConversation);
-    }
-    onIncomingCallBootstrapHandled?.();
-  }, [incomingCallBootstrap, onIncomingCallBootstrapHandled, openConversation]);
-
   const loadConversationDetail = useCallback(async (conversationId: string) => {
     setIsLoadingConversationDetail(true);
     try {
@@ -472,75 +338,6 @@ export function MessagesScreen({
       setIsLoadingConversationDetail(false);
     }
   }, []);
-
-  const openVideoCallRoom = useCallback(
-    async (roomId: string, displayName?: string) => {
-      const url = resolveVideoCallUrl(
-        roomId,
-        displayName || user.fullName || "Người dùng",
-      );
-      setIsOpeningCallRoom(true);
-      // Đánh dấu để dọn modal treo khi quay lại app từ trình duyệt Jitsi.
-      pendingJitsiCleanupRef.current = true;
-      try {
-        const supported = await Linking.canOpenURL(url);
-        if (!supported) {
-          throw new Error("Thiết bị không mở được liên kết cuộc gọi video.");
-        }
-        await Linking.openURL(url);
-      } finally {
-        setIsOpeningCallRoom(false);
-      }
-    },
-    [user.fullName],
-  );
-
-  // Ghi lịch sử cuộc gọi — chỉ phía người khởi tạo (callLogRef được set khi bắt đầu gọi).
-  const logCall = useCallback(
-    (
-      status:
-        | "completed"
-        | "missed"
-        | "rejected"
-        | "no_answer"
-        | "cancelled"
-        | "failed",
-    ) => {
-      const meta = callLogRef.current;
-      if (!meta || meta.logged) return;
-      meta.logged = true;
-      const conv = conversationsRef.current.find(
-        (c) => String(c.id) === meta.conversationId,
-      );
-      const participantIds =
-        (conv?.members || [])
-          .map((m: any) => Number(m.userId))
-          .filter((id: number) => id > 0) ||
-        (meta.targetUserId
-          ? [Number(user.id), meta.targetUserId]
-          : [Number(user.id)]);
-      void api
-        .createCall({
-          conversationId: meta.conversationId,
-          initiatorId: Number(user.id),
-          participantIds: participantIds.length
-            ? participantIds
-            : [Number(user.id), ...(meta.targetUserId ? [meta.targetUserId] : [])],
-          callType: "video",
-          mode: conv?.isGroup ? "group" : "private",
-          status,
-          startedAt: meta.startedAt,
-          answeredAt: meta.answeredAt,
-          endedAt: Date.now(),
-          durationSec: meta.answeredAt
-            ? Math.max(0, Math.round((Date.now() - meta.answeredAt) / 1000))
-            : 0,
-          withName: conv?.name || undefined,
-        })
-        .catch(() => undefined);
-    },
-    [user.id],
-  );
 
   const markMessageEventHandled = useCallback((eventId: string) => {
     const key = String(eventId || "").trim();
@@ -710,145 +507,6 @@ export function MessagesScreen({
       }
     };
 
-    const onCallOffer = (raw: any) => {
-      const payload: CallPayload = {
-        conversationId: String(raw?.conversationId || "").trim(),
-        roomId: String(raw?.roomId || "").trim(),
-        fromUserId: Number(raw?.fromUserId || 0),
-        fromUserName: String(raw?.fromUserName || "Người dùng"),
-        targetUserId: Number(raw?.targetUserId || 0) || undefined,
-        mode: "video",
-      };
-
-      if (!payload.conversationId || !payload.roomId) return;
-      if (payload.fromUserId === Number(user.id)) return;
-
-      const matchedConversation = conversationsRef.current.find(
-        (item) => String(item.id) === payload.conversationId,
-      );
-      const conversationName = String(
-        matchedConversation?.name || payload.fromUserName || "Cuoc goi video",
-      );
-
-      setIncomingCall({ payload, conversationName });
-
-      if (
-        matchedConversation &&
-        activeConversationIdRef.current !== payload.conversationId
-      ) {
-        void openConversation(matchedConversation);
-      }
-    };
-
-    const onCallAnswer = (raw: any) => {
-      const payload: CallPayload = {
-        conversationId: String(raw?.conversationId || "").trim(),
-        roomId: String(raw?.roomId || "").trim(),
-        fromUserId: Number(raw?.fromUserId || 0),
-        fromUserName: String(raw?.fromUserName || "Người dùng"),
-        answeredAt: Number(raw?.answeredAt || 0) || Date.now(),
-      };
-      if (!payload.conversationId || !payload.roomId) return;
-
-      let shouldOpen = false;
-      let openName = "";
-      setOutgoingCall((prev) => {
-        if (!prev) return prev;
-        if (prev.payload.roomId !== payload.roomId) return prev;
-        shouldOpen = true;
-        openName = prev.conversationName || "";
-        return null;
-      });
-
-      if (shouldOpen) {
-        // Cuộc gọi đã được trả lời → ghi nhận đã kết nối (chỉ phía gọi).
-        if (callLogRef.current && callLogRef.current.roomId === payload.roomId) {
-          callLogRef.current.answeredAt = payload.answeredAt || Date.now();
-        }
-        socket.emit("call:join", {
-          conversationId: payload.conversationId,
-          callType: "video",
-          mode: "private",
-          micMuted: false,
-          cameraOff: false,
-        });
-        void openVideoCallRoom(payload.roomId, openName).catch((err) => {
-          Alert.alert(
-            "Không thể mở cuộc gọi video",
-            err instanceof Error ? err.message : "Vui lòng thử lại",
-          );
-        });
-      }
-    };
-
-    const onCallEnd = (raw: any) => {
-      const payload: CallPayload = {
-        conversationId: String(raw?.conversationId || "").trim(),
-        roomId: String(raw?.roomId || "").trim(),
-        fromUserId: Number(raw?.fromUserId || 0),
-        fromUserName: String(raw?.fromUserName || "Người dùng"),
-        reason: String(raw?.reason || "").trim().toLowerCase(),
-      };
-      if (!payload.conversationId || !payload.roomId) return;
-
-      let outgoingStopped = false;
-      setOutgoingCall((prev) => {
-        if (!prev) return prev;
-        if (prev.payload.roomId !== payload.roomId) return prev;
-        outgoingStopped = true;
-        return null;
-      });
-
-      setIncomingCall((prev) => {
-        if (!prev) return prev;
-        if (prev.payload.roomId !== payload.roomId) return prev;
-        return null;
-      });
-
-      if (outgoingStopped) {
-        const rejected = payload.reason === "rejected";
-        logCall(rejected ? "rejected" : "completed");
-        if (rejected) {
-          Alert.alert("Cuộc gọi bị từ chối", "Người nhận đã từ chối cuộc gọi.");
-        }
-      }
-    };
-
-    // Web/mobile từ chối nay dùng call:reject (phân biệt với call:end).
-    const onCallReject = (raw: any) => {
-      const roomId = String(raw?.roomId || "").trim();
-      let stopped = false;
-      setOutgoingCall((prev) => {
-        if (!prev) return prev;
-        if (roomId && prev.payload.roomId !== roomId) return prev;
-        stopped = true;
-        return null;
-      });
-      if (stopped) {
-        logCall("rejected");
-        Alert.alert("Cuộc gọi bị từ chối", "Người nhận đã từ chối cuộc gọi.");
-      }
-    };
-
-    // Người được gọi không trực tuyến (backend phản hồi trực tiếp cho người gọi).
-    const onCallUnavailable = (raw: any) => {
-      const roomId = String(raw?.roomId || "").trim();
-      let stopped = false;
-      setOutgoingCall((prev) => {
-        if (!prev) return prev;
-        if (roomId && prev.payload.roomId !== roomId) return prev;
-        stopped = true;
-        return null;
-      });
-      if (stopped || !roomId) {
-        logCall("no_answer");
-        Alert.alert(
-          "Không thể gọi",
-          "Người dùng hiện không trực tuyến.",
-        );
-      }
-    };
-
     // Backend emit "message:typing" { conversationId, fromUserId, isTyping }
     const onMessageTyping = (payload: any) => {
       const fromUserId = Number(payload?.fromUserId ?? payload?.userId ?? 0);
@@ -932,13 +590,6 @@ export function MessagesScreen({
     socket.on("message:updated", onMessageUpdated);
     socket.on("message:reaction", onMessageReaction);
     socket.on("message:deleted", onMessageDeleted);
-    socket.on("call:offer", onCallOffer);
-    socket.on("call:answer", onCallAnswer);
-    socket.on("call:end", onCallEnd);
-    // Backend emits "call:ended" (with "d") from endActiveCallRoom — listen to both.
-    socket.on("call:ended", onCallEnd);
-    socket.on("call:reject", onCallReject);
-    socket.on("call:unavailable", onCallUnavailable);
     socket.on("connect", onSocketConnect);
     socket.on("message:typing", onMessageTyping);
     socket.on("typing", onMessageTyping);
@@ -952,12 +603,6 @@ export function MessagesScreen({
       socket.off("message:updated", onMessageUpdated);
       socket.off("message:reaction", onMessageReaction);
       socket.off("message:deleted", onMessageDeleted);
-      socket.off("call:offer", onCallOffer);
-      socket.off("call:answer", onCallAnswer);
-      socket.off("call:end", onCallEnd);
-      socket.off("call:ended", onCallEnd);
-      socket.off("call:reject", onCallReject);
-      socket.off("call:unavailable", onCallUnavailable);
       socket.off("connect", onSocketConnect);
       socket.off("message:typing", onMessageTyping);
       socket.off("typing", onMessageTyping);
@@ -970,10 +615,8 @@ export function MessagesScreen({
   }, [
     loadConversationDetail,
     loadConversations,
-    logCall,
     markMessageEventHandled,
     openConversation,
-    openVideoCallRoom,
     scrollMessagesToEnd,
     user.id,
   ]);
@@ -1485,202 +1128,67 @@ export function MessagesScreen({
     !isGroupCallConversation &&
     (activeConversation?.isBlockedByMe || activeConversation?.isBlockedMe),
   );
-  const canStartVideoCall = Boolean(
+
+  const openConversationById = useCallback(
+    (conversationId: string) => {
+      const conv = conversationsRef.current.find(
+        (item) => String(item.id) === conversationId,
+      );
+      if (conv) void openConversation(conv);
+    },
+    [openConversation],
+  );
+
+  const call = useWebRTCCall({
+    user,
+    conversationsRef,
+    activeConversationIdRef,
+    incomingCallBootstrap,
+    onIncomingCallBootstrapHandled,
+    onRequestOpenConversation: openConversationById,
+  });
+
+  const groupCallTargetIds = useMemo(
+    () =>
+      (activeConversation?.members || [])
+        .map((m: any) => Number(m.userId))
+        .filter((id: number) => id > 0 && id !== Number(user.id)),
+    [activeConversation?.members, user.id],
+  );
+
+  const canStartCall = Boolean(
     selectedConv &&
     !directConversationBlocked &&
-    !isOpeningCallRoom &&
-    !outgoingCall &&
-    !incomingCall,
+    !call.activeCall &&
+    !call.outgoingCall &&
+    !call.incomingCall,
   );
 
-  const emitCallEnd = useCallback(
-    (
-      payload: Pick<CallPayload, "conversationId" | "roomId" | "targetUserId"> & {
-        reason: string;
-      },
-    ) => {
-      const socket = socketRef.current;
-      if (!socket) return;
-      socket.emit("call:end", {
-        conversationId: payload.conversationId,
-        roomId: payload.roomId,
-        targetUserId: payload.targetUserId,
-        fromUserId: user.id,
-        fromUserName: user.fullName || "Người dùng",
-        reason: payload.reason,
+  const handleStartCall = useCallback(
+    (callType: "voice" | "video") => {
+      if (!selectedConv || !canStartCall) return;
+      void call.startCall({
+        conversationId: String(selectedConv.id),
+        title: conversationTitle,
+        callType,
+        mode: isGroupCallConversation ? "group" : "private",
+        targetUserIds: isGroupCallConversation
+          ? groupCallTargetIds
+          : callTargetUserId
+            ? [callTargetUserId]
+            : [],
       });
     },
-    [user.fullName, user.id],
+    [
+      call,
+      callTargetUserId,
+      canStartCall,
+      conversationTitle,
+      groupCallTargetIds,
+      isGroupCallConversation,
+      selectedConv,
+    ],
   );
-
-  const handleStartVideoCall = useCallback(async () => {
-    if (!selectedConv || !canStartVideoCall) return;
-    const socket = socketRef.current;
-    if (!socket) {
-      Alert.alert("Chưa kết nối socket", "Vui lòng thử lại sau ít giây.");
-      return;
-    }
-
-    const roomId = await acquireCallRoom(socket, String(selectedConv.id));
-    const payload: CallPayload = {
-      conversationId: String(selectedConv.id),
-      roomId,
-      fromUserId: Number(user.id),
-      fromUserName: user.fullName || "Người dùng",
-      mode: "video",
-      targetUserId: isGroupCallConversation
-        ? undefined
-        : callTargetUserId || undefined,
-    };
-
-    callLogRef.current = {
-      conversationId: payload.conversationId,
-      roomId,
-      startedAt: Date.now(),
-      answeredAt: null,
-      targetUserId: payload.targetUserId,
-      logged: false,
-    };
-
-    socket.emit("call:offer", payload);
-
-    if (isGroupCallConversation) {
-      try {
-        await openVideoCallRoom(roomId);
-      } catch (err) {
-        Alert.alert(
-          "Không thể mở cuộc gọi video",
-          err instanceof Error ? err.message : "Vui lòng thử lại",
-        );
-        emitCallEnd({
-          conversationId: payload.conversationId,
-          roomId: payload.roomId,
-          targetUserId: payload.targetUserId,
-          reason: "error",
-        });
-      }
-      return;
-    }
-
-    setOutgoingCall({
-      payload,
-      conversationName: conversationTitle,
-    });
-  }, [
-    callTargetUserId,
-    canStartVideoCall,
-    conversationTitle,
-    emitCallEnd,
-    isGroupCallConversation,
-    openVideoCallRoom,
-    selectedConv,
-    user.fullName,
-    user.id,
-  ]);
-
-  const handleAcceptIncomingCall = useCallback(async () => {
-    if (!incomingCall) return;
-    const socket = socketRef.current;
-    if (!socket) {
-      Alert.alert("Chưa kết nối socket", "Vui lòng thử lại sau ít giây.");
-      return;
-    }
-
-    const payload = incomingCall.payload;
-    const callName = incomingCall.conversationName;
-    socket.emit("call:answer", {
-      conversationId: payload.conversationId,
-      roomId: payload.roomId,
-      targetUserId: payload.fromUserId || undefined,
-      fromUserId: user.id,
-      fromUserName: user.fullName || "Người dùng",
-      answeredAt: Date.now(),
-      // Báo cho bên gọi (có thể là web đang WebRTC) chuyển sang mở Jitsi cùng phòng.
-      useJitsi: true,
-    });
-    socket.emit("call:join", {
-      conversationId: payload.conversationId,
-      callType: "video",
-      mode: payload.mode || "private",
-      micMuted: false,
-      cameraOff: false,
-    });
-    setIncomingCall(null);
-
-    try {
-      await openVideoCallRoom(payload.roomId, callName);
-    } catch (err) {
-      Alert.alert(
-        "Không thể mở cuộc gọi video",
-        err instanceof Error ? err.message : "Vui lòng thử lại",
-      );
-      emitCallEnd({
-        conversationId: payload.conversationId,
-        roomId: payload.roomId,
-        targetUserId: payload.fromUserId || undefined,
-        reason: "error",
-      });
-    }
-  }, [emitCallEnd, incomingCall, openVideoCallRoom, user.fullName, user.id]);
-
-  const handleDeclineIncomingCall = useCallback(() => {
-    if (!incomingCall) return;
-    const socket = socketRef.current;
-    // Dùng call:reject để bên gọi phân biệt rõ "bị từ chối".
-    socket?.emit("call:reject", {
-      conversationId: incomingCall.payload.conversationId,
-      roomId: incomingCall.payload.roomId,
-      targetUserId: incomingCall.payload.fromUserId || undefined,
-      fromUserId: user.id,
-      fromUserName: user.fullName || "Người dùng",
-      reason: "rejected",
-    });
-    setIncomingCall(null);
-  }, [incomingCall, user.fullName, user.id]);
-
-  const handleCancelOutgoingCall = useCallback(() => {
-    if (!outgoingCall) return;
-    emitCallEnd({
-      conversationId: outgoingCall.payload.conversationId,
-      roomId: outgoingCall.payload.roomId,
-      targetUserId: outgoingCall.payload.targetUserId,
-      reason: "cancelled",
-    });
-    setOutgoingCall(null);
-  }, [emitCallEnd, outgoingCall]);
-
-  useEffect(() => {
-    if (!outgoingCall) return;
-    const timer = setTimeout(() => {
-      emitCallEnd({
-        conversationId: outgoingCall.payload.conversationId,
-        roomId: outgoingCall.payload.roomId,
-        targetUserId: outgoingCall.payload.targetUserId,
-        reason: "no_answer",
-      });
-      logCall("no_answer");
-      setOutgoingCall(null);
-      Alert.alert("Không có phản hồi", "Người nhận chưa trả lời cuộc gọi.");
-    }, 25000);
-
-    return () => clearTimeout(timer);
-  }, [emitCallEnd, logCall, outgoingCall]);
-
-  // Khi quay lại app từ trình duyệt Jitsi: dọn modal cuộc gọi còn treo + ghi nhận đã kết thúc.
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return;
-      if (!pendingJitsiCleanupRef.current) return;
-      pendingJitsiCleanupRef.current = false;
-      // Nếu cuộc gọi đã được trả lời mà chưa ghi log → ghi 'completed' với thời lượng thực.
-      if (callLogRef.current?.answeredAt && !callLogRef.current.logged) {
-        logCall("completed");
-      }
-      setOutgoingCall(null);
-      setIncomingCall(null);
-    });
-    return () => sub.remove();
-  }, [logCall]);
 
   const handleToggleNotifications = useCallback(async () => {
     if (!selectedConv) return;
@@ -2292,25 +1800,35 @@ export function MessagesScreen({
               </TouchableOpacity>
 
               <TouchableOpacity
-                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${canStartVideoCall
+                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${canStartCall
                   ? "bg-primary border-primary"
                   : "bg-surface-secondary border-border"
                   }`}
-                onPress={() => {
-                  void handleStartVideoCall();
-                }}
-                disabled={!canStartVideoCall}
+                onPress={() => handleStartCall("voice")}
+                disabled={!canStartCall}
                 activeOpacity={0.8}
               >
-                {isOpeningCallRoom ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Feather
-                    name="video"
-                    size={16}
-                    color={canStartVideoCall ? "#ffffff" : "#6b7280"}
-                  />
-                )}
+                <Feather
+                  name="phone"
+                  size={16}
+                  color={canStartCall ? "#ffffff" : "#6b7280"}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className={`w-9 h-9 rounded-full border items-center justify-center mr-2 ${canStartCall
+                  ? "bg-primary border-primary"
+                  : "bg-surface-secondary border-border"
+                  }`}
+                onPress={() => handleStartCall("video")}
+                disabled={!canStartCall}
+                activeOpacity={0.8}
+              >
+                <Feather
+                  name="video"
+                  size={16}
+                  color={canStartCall ? "#ffffff" : "#6b7280"}
+                />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -2654,21 +2172,27 @@ export function MessagesScreen({
       )}
 
       <Modal
-        visible={Boolean(outgoingCall)}
+        visible={Boolean(call.outgoingCall)}
         transparent
         animationType="fade"
-        onRequestClose={handleCancelOutgoingCall}
+        onRequestClose={call.cancelOutgoing}
       >
         <View className="flex-1 bg-black/45 items-center justify-center px-6">
           <View className="w-full rounded-2xl bg-surface border border-border p-5">
             <View className="w-12 h-12 rounded-full bg-primary/15 items-center justify-center self-center mb-3">
-              <Feather name="video" size={22} color="#0052ce" />
+              <Feather
+                name={call.outgoingCall?.callType === "voice" ? "phone" : "video"}
+                size={22}
+                color="#0052ce"
+              />
             </View>
             <Text className="text-base font-bold text-foreground text-center mb-1">
-              Đang gọi video...
+              {call.outgoingCall?.callType === "voice"
+                ? "Đang gọi thoại..."
+                : "Đang gọi video..."}
             </Text>
             <Text className="text-sm text-muted-foreground text-center mb-4">
-              {outgoingCall?.conversationName || "Cuộc trò chuyện"}
+              {call.outgoingCall?.title || "Cuộc trò chuyện"}
             </Text>
 
             <View className="items-center mb-4">
@@ -2677,7 +2201,7 @@ export function MessagesScreen({
 
             <TouchableOpacity
               className="h-11 rounded-xl border border-red-200 bg-red-50 items-center justify-center"
-              onPress={handleCancelOutgoingCall}
+              onPress={call.cancelOutgoing}
               activeOpacity={0.85}
             >
               <Text className="text-danger font-semibold">Hủy cuộc gọi</Text>
@@ -2687,27 +2211,33 @@ export function MessagesScreen({
       </Modal>
 
       <Modal
-        visible={Boolean(incomingCall)}
+        visible={Boolean(call.incomingCall)}
         transparent
         animationType="fade"
-        onRequestClose={handleDeclineIncomingCall}
+        onRequestClose={call.declineIncoming}
       >
         <View className="flex-1 bg-black/45 items-center justify-center px-6">
           <View className="w-full rounded-2xl bg-surface border border-border p-5">
             <View className="w-12 h-12 rounded-full bg-primary/15 items-center justify-center self-center mb-3">
-              <Feather name="video" size={22} color="#0052ce" />
+              <Feather
+                name={call.incomingCall?.callType === "voice" ? "phone" : "video"}
+                size={22}
+                color="#0052ce"
+              />
             </View>
             <Text className="text-base font-bold text-foreground text-center mb-1">
-              Cuộc gọi video đến
+              {call.incomingCall?.callType === "voice"
+                ? "Cuộc gọi thoại đến"
+                : "Cuộc gọi video đến"}
             </Text>
             <Text className="text-sm text-muted-foreground text-center mb-5">
-              {incomingCall?.payload.fromUserName || "Người dùng"} đang gọi cho bạn
+              {call.incomingCall?.fromUserName || "Người dùng"} đang gọi cho bạn
             </Text>
 
             <View className="flex-row items-center">
               <TouchableOpacity
                 className="flex-1 h-11 rounded-xl border border-red-200 bg-red-50 items-center justify-center mr-2"
-                onPress={handleDeclineIncomingCall}
+                onPress={call.declineIncoming}
                 activeOpacity={0.85}
               >
                 <Text className="text-danger font-semibold">Từ chối</Text>
@@ -2715,20 +2245,38 @@ export function MessagesScreen({
               <TouchableOpacity
                 className="flex-1 h-11 rounded-xl bg-primary items-center justify-center ml-2"
                 onPress={() => {
-                  void handleAcceptIncomingCall();
+                  void call.acceptIncoming();
                 }}
                 activeOpacity={0.85}
               >
-                {isOpeningCallRoom ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text className="text-white font-semibold">Nhận</Text>
-                )}
+                <Text className="text-white font-semibold">Nhận</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      <CallScreen
+        visible={call.isInCall}
+        callType={call.activeCall?.callType || "video"}
+        mode={call.activeCall?.mode || "private"}
+        title={call.activeCall?.title || "Cuộc gọi"}
+        statusText={call.statusText}
+        localStream={call.localStream}
+        remoteStreams={call.remoteStreams}
+        remoteMedia={call.remoteMedia}
+        participantNames={call.participantNames}
+        micMuted={call.micMuted}
+        cameraOff={call.cameraOff}
+        speakerOn={call.speakerOn}
+        onToggleMic={call.toggleMic}
+        onToggleCamera={() => {
+          void call.toggleCamera();
+        }}
+        onSwitchCamera={call.switchCamera}
+        onToggleSpeaker={call.toggleSpeaker}
+        onEnd={call.hangup}
+      />
 
       <ComposeConversationModal
         visible={showComposeModal}

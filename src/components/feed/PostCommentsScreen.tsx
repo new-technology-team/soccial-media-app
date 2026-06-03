@@ -77,6 +77,7 @@ export function PostCommentsScreen({
   );
   const [pickerCommentId, setPickerCommentId] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const listRef = useRef<FlatList>(null);
 
   const startReply = useCallback((comment: FeedComment) => {
     setReplyTo(comment);
@@ -132,6 +133,7 @@ export function PostCommentsScreen({
 
     // Trả lời 1 reply → gắn vào comment gốc để hiển thị đúng nhánh.
     const parentId = replyTo ? replyTo.parentId || replyTo.id : null;
+    const isRootComment = !parentId;
 
     setIsSubmitting(true);
     try {
@@ -140,6 +142,13 @@ export function PostCommentsScreen({
       setReplyTo(null);
       await loadComments();
       onCommentAdded?.();
+      // Bình luận gốc mới nằm cuối danh sách (sắp xếp cũ→mới) → cuộn xuống để
+      // người dùng thấy bình luận vừa gửi thay vì tưởng gửi hụt.
+      if (isRootComment) {
+        requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      }
+    } catch {
+      Alert.alert("Không gửi được bình luận", "Vui lòng kiểm tra kết nối và thử lại.");
     } finally {
       setIsSubmitting(false);
     }
@@ -338,14 +347,15 @@ export function PostCommentsScreen({
 
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 96 : 90}
       >
         <FlatList
+          ref={listRef}
           data={rootComments}
           keyExtractor={(item) => String(item.id)}
           className="flex-1"
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
           refreshControl={
             <RefreshControl

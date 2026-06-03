@@ -71,7 +71,7 @@ export function CommentModal({
     >
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === "ios" ? 24 : 0}
       >
         <Pressable

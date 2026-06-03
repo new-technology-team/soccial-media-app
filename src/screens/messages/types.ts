@@ -18,10 +18,11 @@ export interface MessagesScreenProps {
   onOpenPost?: (postId: string) => void;
   incomingCallBootstrap?: {
     conversationId: string;
-    roomId: string;
     fromUserId: number;
     fromUserName?: string;
-    targetUserId?: number;
+    callType?: "voice" | "video";
+    mode?: "private" | "group";
+    offer?: { type: string; sdp: string };
     routeKey?: number;
   } | null;
   onIncomingCallBootstrapHandled?: () => void;
